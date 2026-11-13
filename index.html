@@ -702,11 +702,21 @@ VIEWS.import={
   },
   update(){if(S._imp)renderImport();}
 };
+// Fichier déposé, ou fiche glissée depuis l'app Contacts (certains navigateurs la reçoivent en texte vCard et non en fichier).
+function fichierDepose(dt){
+  if(!dt)return null;
+  if(dt.files&&dt.files.length)return dt.files[0];
+  for(const t of ["text/vcard","text/x-vcard","text/directory","text/plain","Text"]){
+    let v="";try{v=dt.getData(t)||"";}catch(e){}
+    if(/BEGIN:VCARD/i.test(v))return new File([v],"contacts.vcf",{type:"text/vcard"});
+  }
+  return null;
+}
 function dropZone(el,input,cb){
   input.onchange=()=>{if(input.files[0])cb(input.files[0]);input.value="";};
   el.addEventListener("dragover",e=>{e.preventDefault();el.classList.add("over");});
   el.addEventListener("dragleave",()=>el.classList.remove("over"));
-  el.addEventListener("drop",e=>{e.preventDefault();el.classList.remove("over");const f=e.dataTransfer.files[0];if(f)cb(f);});
+  el.addEventListener("drop",e=>{e.preventDefault();el.classList.remove("over");const f=fichierDepose(e.dataTransfer);if(f)cb(f);else toast("Rien de lisible dans ce dépôt");});
 }
 async function readTable(f){
   if(/\.(xlsx?|ods)$/i.test(f.name||"")){
@@ -1269,9 +1279,10 @@ async function start(){
   }
   // Une fiche Contacts lâchée n'importe où dans l'appli ouvre cet écran ; tout autre fichier lâché hors d'une zone prévue est ignoré
   // (au lieu d'être ouvert par le navigateur).
-  window.addEventListener("dragover",e=>{if(e.dataTransfer&&[...e.dataTransfer.types].includes("Files"))e.preventDefault();});
-  window.addEventListener("drop",e=>{if(e.defaultPrevented||!e.dataTransfer||!e.dataTransfer.files.length)return;e.preventDefault();
-    const f=e.dataTransfer.files[0];
+  const champTexte=t=>t&&t.closest&&t.closest("input,textarea,[contenteditable]");
+  window.addEventListener("dragover",e=>{if(!champTexte(e.target))e.preventDefault();});
+  window.addEventListener("drop",e=>{if(e.defaultPrevented||champTexte(e.target))return;e.preventDefault();
+    const f=fichierDepose(e.dataTransfer);if(!f)return toast("Rien de lisible dans ce dépôt");
     if(S.isAdmin&&(/\.vcf$/i.test(f.name||"")||/vcard/i.test(f.type||""))){if(location.hash!=="#listing")location.hash="#listing";setTimeout(()=>charger(f),150);}
     else toast("Déposez le fichier dans le cadre prévu");});
 
