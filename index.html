@@ -713,10 +713,10 @@ function fichierDepose(dt){
   return null;
 }
 function dropZone(el,input,cb){
-  input.onchange=()=>{if(input.files[0])cb(input.files[0]);input.value="";};
+  input.onchange=()=>{if(input.files[0])cb(input.files[0],[...input.files]);input.value="";};
   el.addEventListener("dragover",e=>{e.preventDefault();el.classList.add("over");});
   el.addEventListener("dragleave",()=>el.classList.remove("over"));
-  el.addEventListener("drop",e=>{e.preventDefault();el.classList.remove("over");const f=fichierDepose(e.dataTransfer);if(f)cb(f);else toast("Rien de lisible dans ce dépôt");});
+  el.addEventListener("drop",e=>{e.preventDefault();el.classList.remove("over");const f=fichierDepose(e.dataTransfer);if(f)cb(f,e.dataTransfer.files&&e.dataTransfer.files.length?[...e.dataTransfer.files]:[f]);else toast("Rien de lisible dans ce dépôt");});
 }
 async function readTable(f){
   if(/\.(xlsx?|ods)$/i.test(f.name||"")){
@@ -1269,9 +1269,11 @@ async function start(){
     if(!out.length)throw new Error(sans?"aucune fiche avec un nom et un prénom":"aucune fiche contact trouvée");
     out.ignores=sans;return out;
   }
-  async function charger(f){
+  const estVcf=f=>/\.vcf$/i.test(f.name||"")||/vcard/i.test(f.type||"");
+  async function charger(f,tous){
     try{
-      if(/\.vcf$/i.test(f.name||"")||/vcard/i.test(f.type||"")){const L=lireVcf(await f.text());A=analyser(L,true);A.contacts=true;A.ignores=L.ignores||0;mode="completer";
+      const vcfs=(tous||[f]).filter(estVcf);
+      if(vcfs.length){const L=lireVcf((await Promise.all(vcfs.map(x=>x.text()))).join("\n"));A=analyser(L,true);A.contacts=true;A.ignores=L.ignores||0;mode="completer";
         $$("#lsMode button").forEach(x=>x.classList.toggle("on",x.dataset.v===mode));}
       else{A=analyser(lire(await readTable(f)));}
       rendre();
@@ -1282,8 +1284,8 @@ async function start(){
   const champTexte=t=>t&&t.closest&&t.closest("input,textarea,[contenteditable]");
   window.addEventListener("dragover",e=>{if(!champTexte(e.target))e.preventDefault();});
   window.addEventListener("drop",e=>{if(e.defaultPrevented||champTexte(e.target))return;e.preventDefault();
-    const f=fichierDepose(e.dataTransfer);if(!f)return toast("Rien de lisible dans ce dépôt");
-    if(S.isAdmin&&(/\.vcf$/i.test(f.name||"")||/vcard/i.test(f.type||""))){if(location.hash!=="#listing")location.hash="#listing";setTimeout(()=>charger(f),150);}
+    const f=fichierDepose(e.dataTransfer);if(!f)return toast("Rien de lisible dans ce dépôt");const tous=e.dataTransfer.files.length?[...e.dataTransfer.files]:[f];
+    if(S.isAdmin&&(/\.vcf$/i.test(f.name||"")||/vcard/i.test(f.type||""))){if(location.hash!=="#listing")location.hash="#listing";setTimeout(()=>charger(f,tous),150);}
     else toast("Déposez le fichier dans le cadre prévu");});
 
   function analyser(lignes,sansAbsents){
@@ -1362,7 +1364,7 @@ async function start(){
     shell:()=>`<a class="back" href="#plus">‹ Plus</a>${intro("Le personnel","Mise à jour du listing","Déposez le nouveau listing : rien n'est écrit avant « Appliquer ».")}
       <div class="seg" id="lsMode"><button data-v="remplacer" class="${mode==="remplacer"?"on":""}">Le listing fait foi</button><button data-v="completer" class="${mode==="completer"?"on":""}">Compléter seulement</button></div>
       <p class="note">${"« Le listing fait foi » : les mails et téléphones des fiches sont remplacés par ceux du listing, les adresses qui n'y figurent plus sont effacées. « Compléter seulement » : ajoute ce qui manque, n'efface rien."}</p>
-      <label class="drop" id="lsDrop" style="margin-top:12px"><input type="file" id="lsFile" accept=".ods,.xlsx,.xls,.csv,.vcf,text/vcard,text/x-vcard,application/vnd.oasis.opendocument.spreadsheet,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv" hidden>Glissez ici le listing (ODS, Excel, CSV) ou des fiches de l'app Contacts, ou touchez pour choisir</label>
+      <label class="drop" id="lsDrop" style="margin-top:12px"><input type="file" id="lsFile" multiple accept=".ods,.xlsx,.xls,.csv,.vcf,text/vcard,text/x-vcard,application/vnd.oasis.opendocument.spreadsheet,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv" hidden>Glissez ici le listing (ODS, Excel, CSV) ou des fiches de l'app Contacts, ou touchez pour choisir</label>
       <p class="note">Listing : colonnes NOM, PRÉNOM, Service, E-mail (plusieurs adresses séparées par « ; »), Téléphone portable, Catégorie.<br>Contacts : sur Mac, sélectionnez une ou plusieurs fiches dans l'app Contacts et glissez-les ici (ou n'importe où dans l'appli). Sur iPhone : Contacts › fiche › Partager le contact › Enregistrer dans Fichiers, puis touchez ce cadre. Les fiches Contacts complètent sans rien effacer.</p>
       <div id="lsRes"></div>`,
     bind(){
