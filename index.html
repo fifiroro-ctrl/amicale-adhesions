@@ -1128,21 +1128,33 @@ function eventSheet(id){
 }
 
 /* ================= CONNEXION ================= */
+// « Se souvenir de moi » : coché, la session et l'adresse restent sur l'appareil ; décoché, la session s'arrête à la fermeture.
+function lsGet(k){try{return localStorage.getItem(k);}catch(e){return null;}}
+function lsSet(k,v){try{localStorage.setItem(k,v);}catch(e){}}
+function lsDel(k){try{localStorage.removeItem(k);}catch(e){}}
+function souvenir(){return lsGet("amgp_souvenir")!=="0";}
+const stockageSession={
+  getItem:k=>{try{return (souvenir()?localStorage:sessionStorage).getItem(k);}catch(e){return null;}},
+  setItem:(k,v)=>{try{(souvenir()?localStorage:sessionStorage).setItem(k,v);}catch(e){}},
+  removeItem:k=>{try{localStorage.removeItem(k);sessionStorage.removeItem(k);}catch(e){}}
+};
 VIEWS.login={
   shell:()=>`<div class="login">${intro("Espace du bureau",S.recovery?"Nouveau mot de passe":"Connexion",S.recovery?"Choisissez votre nouveau mot de passe.":"Réservé au bureau de l'Amicale.")}
     ${CONFIG_OK?(S.recovery?`<div class="card"><label class="f"><span>Nouveau mot de passe (8 caractères minimum)</span><input id="lNp" type="password" autocomplete="new-password"></label></div><button class="btn gold full" id="lNpOk">Enregistrer</button>`
-    :`<div class="card"><label class="f"><span>Adresse mail</span><input id="lE" type="email" autocomplete="username" autocapitalize="off"></label>
-    <label class="f"><span>Mot de passe</span><input id="lP" type="password" autocomplete="current-password"></label></div>
-    <button class="btn gold full" id="lGo">Se connecter</button>
+    :`<form id="lF" method="post" action="#" autocomplete="on"><div class="card"><label class="f"><span>Adresse mail</span><input id="lE" name="email" type="email" autocomplete="username" autocapitalize="off" value="${esc(souvenir()?(lsGet("amgp_mail")||""):"")}"></label>
+    <label class="f"><span>Mot de passe</span><input id="lP" name="password" type="password" autocomplete="current-password"></label>
+    <label class="check"><input type="checkbox" id="lS" ${souvenir()?"checked":""}> Se souvenir de moi</label></div>
+    <button class="btn gold full" id="lGo" type="submit">Se connecter</button></form>
     <p class="note" style="text-align:center"><a class="lnk" href="#" id="lOubli">Mot de passe oublié ?</a></p>`):`<div class="banner">L'appli n'est pas encore reliée à sa base de données (fichier config.js à compléter).</div>`}
     <div id="lMsg"></div></div>`,
   bind(){
     if(!CONFIG_OK)return;
     if(S.recovery){$("#lNpOk").onclick=async()=>{const v=$("#lNp").value;if(v.length<8)return toast("8 caractères minimum");const {error}=await S.sb.auth.updateUser({password:v});if(error)return toast("Impossible : "+errMsg(error));S.recovery=false;toast("Mot de passe enregistré");start();};return;}
     const go=async()=>{const email=$("#lE").value.trim(),password=$("#lP").value;if(!email||!password)return toast("Mail et mot de passe");
+      const sv=$("#lS").checked;lsSet("amgp_souvenir",sv?"1":"0");sv?lsSet("amgp_mail",email):lsDel("amgp_mail");
       $("#lGo").disabled=true;const {error}=await S.sb.auth.signInWithPassword({email,password});$("#lGo").disabled=false;
       if(error)return toast(/invalid/i.test(error.message)?"Mail ou mot de passe incorrect":"Connexion impossible : "+errMsg(error));};
-    $("#lGo").onclick=go;$("#lP").onkeydown=e=>{if(e.key==="Enter")go();};
+    $("#lF").onsubmit=e=>{e.preventDefault();go();};if($("#lE").value)$("#lP").focus();
     $("#lOubli").onclick=async e=>{e.preventDefault();const email=$("#lE").value.trim();if(!email)return toast("Indiquez d'abord votre adresse mail");
       const {error}=await S.sb.auth.resetPasswordForEmail(email,{redirectTo:location.origin+location.pathname});
       $("#lMsg").innerHTML=error?`<div class="banner">Impossible : ${esc(errMsg(error))}</div>`:`<div class="banner ok">Si ce mail correspond à un compte, un lien pour choisir un nouveau mot de passe vient d'être envoyé.</div>`;};
@@ -1181,7 +1193,7 @@ async function start(){
 }
 (function init(){
   if(!CONFIG_OK){go();return;}
-  S.sb=window.supabase.createClient(window.SUPABASE_URL,window.SUPABASE_ANON_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
+  S.sb=window.supabase.createClient(window.SUPABASE_URL,window.SUPABASE_ANON_KEY,{auth:{persistSession:true,storage:stockageSession,autoRefreshToken:true,detectSessionInUrl:true}});
   S.sb.auth.onAuthStateChange((ev)=>{if(ev==="PASSWORD_RECOVERY"){S.recovery=true;go();return;}if(ev==="SIGNED_IN"||ev==="SIGNED_OUT")setTimeout(start,0);});
   document.addEventListener("visibilitychange",()=>{if(!document.hidden&&S.session)reload();});
   setInterval(()=>{if(S.session&&!document.hidden)reload();},60000);
@@ -1197,7 +1209,7 @@ async function start(){
   SUBVIEWS.push("listing");
   const plusShell=VIEWS.plus.shell;
   VIEWS.plus.shell=()=>{const h=plusShell();if(!S.isAdmin)return h;
-    return h.replace('<a class="row" href="#import"','<a class="row" href="#listing" style="text-decoration:none;color:inherit"><div class="main"><b>Mise à jour du listing</b><small>Nouveau listing du personnel · mails et téléphones</small></div><div class="right">›</div></a><a class="row" href="#import"');};
+    return h.replace('<a class="row" href="#import"','<a class="row" href="#listing" style="text-decoration:none;color:inherit"><div class="main"><b>Mise à jour du listing</b><small>Nouveau listing du personnel ou fiches Contacts</small></div><div class="right">›</div></a><a class="row" href="#import"');};
 
   const baseNom=s=>norm(String(s||"").replace(/\(.*?\)/g,""));
   const chiffres=s=>String(s||"").replace(/\D/g,"").replace(/^33/,"0");
@@ -1221,7 +1233,49 @@ async function start(){
     }).filter(l=>l.nom&&l.prenom);
   }
 
-  function analyser(lignes){
+  // Fiches Contacts (vCard, .vcf) : glissées depuis l'app Contacts du Mac ou partagées depuis l'iPhone.
+  function lireVcf(t){
+    t=t.replace(/^\uFEFF/,"").replace(/\r\n/g,"\n").replace(/=\n/g,"=\u0000").replace(/\n[ \t]/g,"");
+    const out=[];let sans=0;
+    t.split(/BEGIN:VCARD/i).slice(1).forEach(bloc=>{
+      const c={n:"",fn:"",org:"",email:[],tels:[]};
+      bloc.split("\n").forEach(li=>{
+        const m=li.replace(/\u0000/g,"").match(/^(?:[\w-]+\.)?([A-Za-z-]+)((?:;[^:]*)?):(.*)$/);if(!m)return;
+        const k=m[1].toUpperCase(),par=m[2].toUpperCase();let v=m[3];
+        if(/QUOTED-PRINTABLE/.test(par)){try{v=decodeURIComponent(v.replace(/=([0-9A-F]{2})/gi,"%$1"));}catch(e){}}
+        const un=x=>x.replace(/\\n/gi," ").replace(/\\([,;\\])/g,"$1").trim();
+        if(k==="N")c.n=v;else if(k==="FN")c.fn=un(v);else if(k==="ORG")c.org=un(v.split(";")[0]);
+        else if(k==="X-ABSHOWAS"&&/COMPANY/i.test(v))c.societe=true;
+        else if(k==="EMAIL")c.email.push(un(v).toLowerCase());
+        else if(k==="TEL")c.tels.push({v:un(v),mob:/CELL|IPHONE|MOBILE/.test(par)});
+      });
+      const p=c.n.split(/(?<!\\);/).map(x=>x.replace(/\\([,;\\])/g,"$1").trim());
+      let nom=p[0]||"",prenom=p[1]||"";
+      if(!nom&&!prenom&&c.fn&&!c.societe&&norm(c.fn)!==norm(c.org)){const w=c.fn.split(/\s+/);prenom=w.shift();nom=w.join(" ");}
+      if(!nom||!prenom){sans++;return;}
+      const tel=(c.tels.find(x=>x.mob)||c.tels[0]||{v:""}).v;
+      out.push({nom,prenom,service:"",email:[...new Set(c.email)].filter(mailOk),tel,categorie:""});
+    });
+    if(!out.length)throw new Error(sans?"aucune fiche avec un nom et un prénom":"aucune fiche contact trouvée");
+    out.ignores=sans;return out;
+  }
+  async function charger(f){
+    try{
+      if(/\.vcf$/i.test(f.name||"")||/vcard/i.test(f.type||"")){const L=lireVcf(await f.text());A=analyser(L,true);A.contacts=true;A.ignores=L.ignores||0;mode="completer";
+        $$("#lsMode button").forEach(x=>x.classList.toggle("on",x.dataset.v===mode));}
+      else{A=analyser(lire(await readTable(f)));}
+      rendre();
+    }catch(e){toast("Fichier illisible : "+e.message);}
+  }
+  // Une fiche Contacts lâchée n'importe où dans l'appli ouvre cet écran ; tout autre fichier lâché hors d'une zone prévue est ignoré
+  // (au lieu d'être ouvert par le navigateur).
+  window.addEventListener("dragover",e=>{if(e.dataTransfer&&[...e.dataTransfer.types].includes("Files"))e.preventDefault();});
+  window.addEventListener("drop",e=>{if(e.defaultPrevented||!e.dataTransfer||!e.dataTransfer.files.length)return;e.preventDefault();
+    const f=e.dataTransfer.files[0];
+    if(S.isAdmin&&(/\.vcf$/i.test(f.name||"")||/vcard/i.test(f.type||""))){if(location.hash!=="#listing")location.hash="#listing";setTimeout(()=>charger(f),150);}
+    else toast("Déposez le fichier dans le cadre prévu");});
+
+  function analyser(lignes,sansAbsents){
     const pris=new Set(),nouveaux=[],modifs=[];
     lignes.forEach(l=>{
       const libres=S.membres.filter(m=>!pris.has(m.id));
@@ -1237,7 +1291,7 @@ async function start(){
       if(plus.length||moins.length||telNouv||telPlus||nom||service||categorie)
         modifs.push({m,l,avant,plus,moins,garder:new Set(),telNouv,telPlus,nom,service,categorie,on:true});
     });
-    const absents=S.membres.filter(m=>!pris.has(m.id)&&m.actif!==false&&(/listing/i.test(m.source||"")||m.potentiel===true)).map(m=>({m,on:false}));
+    const absents=sansAbsents?[]:S.membres.filter(m=>!pris.has(m.id)&&m.actif!==false&&(/listing/i.test(m.source||"")||m.potentiel===true)).map(m=>({m,on:false}));
     return {lignes,nouveaux,modifs,absents};
   }
 
@@ -1260,7 +1314,7 @@ async function start(){
     if(!A){el.innerHTML="";return;}
     const mods=A.modifs.filter(utile);
     const nbEff=mods.filter(x=>x.on).reduce((n,x)=>n+(mode==="remplacer"?x.moins.filter(e=>!x.garder.has(e)).length:0),0);
-    el.innerHTML=`<div class="card"><b>${A.lignes.length} personnes dans le listing</b><p class="note" style="margin-bottom:0">${A.nouveaux.length} nouvelle${A.nouveaux.length>1?"s":""} · ${mods.length} fiche${mods.length>1?"s":""} à mettre à jour · ${A.absents.length} absente${A.absents.length>1?"s":""} du listing</p></div>
+    el.innerHTML=`<div class="card"><b>${A.lignes.length} ${A.contacts?`fiche${A.lignes.length>1?"s":""} Contacts`:"personnes dans le listing"}</b>${A.ignores?`<p class="note" style="margin:4px 0 0">${A.ignores} fiche${A.ignores>1?"s":""} sans nom et prénom ignorée${A.ignores>1?"s":""} (sociétés…).</p>`:""}<p class="note" style="margin-bottom:0">${A.nouveaux.length} nouvelle${A.nouveaux.length>1?"s":""} · ${mods.length} fiche${mods.length>1?"s":""} à mettre à jour · ${A.absents.length} absente${A.absents.length>1?"s":""} du listing</p></div>
       ${mods.length?`<h3>Mises à jour</h3><p class="note">${mode==="remplacer"?"Barré en rouge : adresse effacée. Touchez-la pour la conserver.":"Mode compléter : rien n'est effacé."}</p>
       <div class="list">${A.modifs.map((x,i)=>{if(!utile(x))return"";const t=cible(x);
         const chips=[...x.plus.map(e=>`<span class="mchip add">+ ${esc(e)}</span>`),
@@ -1284,7 +1338,7 @@ async function start(){
     if(!await confirmBox(`Mettre à jour ${mods.length} fiche${mods.length>1?"s":""}, ajouter ${nv.length} personne${nv.length>1?"s":""} et désactiver ${ab.length} fiche${ab.length>1?"s":""} ?`,"Appliquer",false))return;
     const st=$("#lsSt"),go=$("#lsGo");go.disabled=true;let ok=0,ko=0,n=0;const tot=mods.length+nv.length+ab.length;
     const pas=r=>{r?ok++:ko++;n++;st.textContent=`${n} / ${tot}…`;};
-    const source="Listing personnel "+new Date().toLocaleDateString("fr-FR",{month:"long",year:"numeric"});
+    const source=(A.contacts?"Contacts ":"Listing personnel ")+new Date().toLocaleDateString("fr-FR",{month:"long",year:"numeric"});
     for(const x of mods)pas(await upd("membres/"+x.m.id,{...cible(x),modifie:new Date().toISOString()},true));
     for(const x of nv)pas(await put("membres/"+uid(),{nom:x.l.nom,prenom:x.l.prenom,service:x.l.service,categorie:x.l.categorie,email:x.l.email.join(", "),tel:x.l.tel,instrument:"",actif:true,potentiel:true,source,cree:new Date().toISOString()}));
     for(const x of ab)pas(await upd("membres/"+x.m.id,{actif:false,modifie:new Date().toISOString()},true));
@@ -1297,12 +1351,12 @@ async function start(){
     shell:()=>`<a class="back" href="#plus">‹ Plus</a>${intro("Le personnel","Mise à jour du listing","Déposez le nouveau listing : rien n'est écrit avant « Appliquer ».")}
       <div class="seg" id="lsMode"><button data-v="remplacer" class="${mode==="remplacer"?"on":""}">Le listing fait foi</button><button data-v="completer" class="${mode==="completer"?"on":""}">Compléter seulement</button></div>
       <p class="note">${"« Le listing fait foi » : les mails et téléphones des fiches sont remplacés par ceux du listing, les adresses qui n'y figurent plus sont effacées. « Compléter seulement » : ajoute ce qui manque, n'efface rien."}</p>
-      <label class="drop" id="lsDrop" style="margin-top:12px"><input type="file" id="lsFile" accept=".ods,.xlsx,.xls,.csv,application/vnd.oasis.opendocument.spreadsheet,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv" hidden>Glissez le listing (ODS, Excel ou CSV) ici ou touchez pour le choisir</label>
-      <p class="note">Colonnes reconnues : NOM, PRÉNOM, Service, E-mail (plusieurs adresses séparées par « ; »), Téléphone portable, Catégorie.</p>
+      <label class="drop" id="lsDrop" style="margin-top:12px"><input type="file" id="lsFile" accept=".ods,.xlsx,.xls,.csv,.vcf,text/vcard,text/x-vcard,application/vnd.oasis.opendocument.spreadsheet,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv" hidden>Glissez ici le listing (ODS, Excel, CSV) ou des fiches de l'app Contacts, ou touchez pour choisir</label>
+      <p class="note">Listing : colonnes NOM, PRÉNOM, Service, E-mail (plusieurs adresses séparées par « ; »), Téléphone portable, Catégorie.<br>Contacts : sur Mac, sélectionnez une ou plusieurs fiches dans l'app Contacts et glissez-les ici (ou n'importe où dans l'appli). Sur iPhone : Contacts › fiche › Partager le contact › Enregistrer dans Fichiers, puis touchez ce cadre. Les fiches Contacts complètent sans rien effacer.</p>
       <div id="lsRes"></div>`,
     bind(){
       $$("#lsMode button").forEach(b=>b.onclick=()=>{mode=b.dataset.v;$$("#lsMode button").forEach(x=>x.classList.toggle("on",x===b));rendre();});
-      dropZone($("#lsDrop"),$("#lsFile"),async f=>{try{A=analyser(lire(await readTable(f)));rendre();}catch(e){toast("Fichier illisible : "+e.message);}});
+      dropZone($("#lsDrop"),$("#lsFile"),charger);
       rendre();
     },
     update(){}
