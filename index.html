@@ -29,7 +29,10 @@ header{position:sticky;top:0;z-index:5;background:var(--navy);color:#fff;padding
 header .t1{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#cbd2e5}
 header .t2{font-size:20px;font-weight:750;display:flex;align-items:center;gap:8px;letter-spacing:-.3px}
 header .t2 .note-sym{color:var(--gold)}
-header .saison{margin-left:auto;font-size:12px;background:var(--gold);color:var(--navy);padding:3px 10px;border-radius:20px;font-weight:700}
+header .pres{margin-left:auto;display:flex;gap:4px;align-items:center;cursor:pointer}header .pres:empty{display:none}header .pres:empty+.saison{margin-left:auto}
+header .pres .p{position:relative;width:28px;height:28px;border-radius:50%;background:#2c3a66;color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center}
+header .pres .p::after{content:"";position:absolute;right:-1px;bottom:-1px;width:9px;height:9px;border-radius:50%;background:#34c759;border:2px solid var(--navy)}
+header .saison{margin-left:8px;font-size:12px;background:var(--gold);color:var(--navy);padding:3px 10px;border-radius:20px;font-weight:700}
 main{padding:14px 14px calc(env(safe-area-inset-bottom) + 92px);max-width:780px;margin:0 auto}
 nav#tabs{position:fixed;left:0;right:0;bottom:0;z-index:6;background:var(--card);border-top:1px solid var(--line);display:flex;padding:6px 4px calc(env(safe-area-inset-bottom) + 6px)}
 nav#tabs a{flex:1;text-align:center;text-decoration:none;color:var(--mut);font-size:11px;padding:4px 0;min-height:44px}
@@ -122,10 +125,11 @@ table.prev select{font-size:13px;padding:6px;min-height:36px}
 
 /* ---- Grand écran : menu latéral ---- */
 @media (min-width:900px){
-  header{position:fixed;left:0;top:0;width:var(--side);height:120px;padding:26px 20px 0;background:var(--navy);z-index:8}
+  header{position:fixed;left:0;top:0;width:var(--side);height:136px;padding:26px 20px 0;background:var(--navy);z-index:8}
   header .t2{flex-wrap:wrap;font-size:24px}
   header .saison{margin:6px 0 0}
-  nav#tabs{top:120px;bottom:0;right:auto;width:var(--side);flex-direction:column;justify-content:flex-start;background:var(--navy);border:0;padding:18px 14px;gap:4px}
+  header .pres{order:3;margin:6px 0 0 8px}
+  nav#tabs{top:136px;bottom:0;right:auto;width:var(--side);flex-direction:column;justify-content:flex-start;background:var(--navy);border:0;padding:18px 14px;gap:4px}
   nav#tabs a{flex:none;display:flex;align-items:center;gap:12px;font-size:15px;color:#c9cfe0;padding:11px 14px;border-radius:10px;text-align:left;min-height:0}
   nav#tabs a svg{margin:0;width:20px;height:20px}
   nav#tabs a.on,nav#tabs a:hover{background:var(--navy2);color:#fff}
@@ -146,7 +150,7 @@ table.prev select{font-size:13px;padding:6px;min-height:36px}
 <body>
 <header>
   <div class="t1">Amicale de la Musique des Gardiens de la Paix</div>
-  <div class="t2"><span class="note-sym">♩</span><span>Adhésions</span><span class="saison" id="hsaison"></span></div>
+  <div class="t2"><span class="note-sym">♩</span><span>Adhésions</span><span class="pres" id="hpres"></span><span class="saison" id="hsaison"></span></div>
 </header>
 <nav id="tabs"></nav>
 <main id="view"><div class="empty">Chargement…</div></main>
@@ -280,6 +284,7 @@ function openSheet(title,html,mount){
 }
 function closeSheet(){$("#sheet").classList.add("hidden");document.body.style.overflow="";$("#panel").innerHTML="";}
 $("#sheet").addEventListener("click",e=>{if(e.target.id==="sheet")closeSheet();});
+$("#hpres").addEventListener("click",()=>voirPresence());
 function confirmBox(msg,ok="Confirmer",danger=true){
   return new Promise(res=>{
     const host=document.createElement("div");host.className="sheet";host.style.zIndex=30;host.style.alignItems="center";
@@ -1173,7 +1178,30 @@ VIEWS.login={
 
 /* ================= DEMARRAGE ================= */
 const CONFIG_OK=!!(window.SUPABASE_URL&&window.SUPABASE_ANON_KEY&&!/A_COMPLETER/.test(window.SUPABASE_URL+window.SUPABASE_ANON_KEY)&&window.supabase);
-let reloadH=0,channel=null;
+let reloadH=0,channel=null,presence=null;
+/* Présence : qui a l'appli ouverte en ce moment (visible par l'administrateur). */
+function appareil(){const u=navigator.userAgent;return /iPhone/.test(u)?"iPhone":/iPad/.test(u)?"iPad":/Android/.test(u)?"Android":/Mac/.test(u)?"Mac":/Windows/.test(u)?"PC":"ordinateur";}
+function majPresence(){
+  const el=$("#hpres");if(!el)return;
+  if(!S.isAdmin||!presence){el.innerHTML="";return;}
+  const st=presence.presenceState(),par={};
+  Object.values(st).flat().forEach(x=>{if(!x.uid||x.uid===S.uid)return;const o=par[x.uid]||(par[x.uid]={...x,appareils:new Set()});o.appareils.add(x.appareil);if(x.depuis<o.depuis)o.depuis=x.depuis;});
+  S.enLigne=Object.values(par);
+  el.innerHTML=S.enLigne.map(x=>`<span class="p" title="${esc(x.nom)} est connecté">${esc(x.initiales||"?")}</span>`).join("");
+  el.title=S.enLigne.length?"Connectés en ce moment":"";
+}
+function voirPresence(){
+  const L=S.enLigne||[];if(!L.length)return;
+  const h=d=>new Date(d).toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit"});
+  openSheet("Connectés en ce moment",`<div class="list">${L.map(x=>`<div class="row" style="cursor:default"><div class="av">${esc(x.initiales||"?")}</div><div class="main"><b>${esc(x.nom)}</b><small>${x.role==="admin"?"administrateur":"caissier"} · ${esc([...x.appareils].join(", "))} · depuis ${h(x.depuis)}</small></div><div class="right"><span class="chip ok">en ligne</span></div></div>`).join("")}</div><p class="note">Une personne apparaît tant que l'appli est ouverte sur son appareil.</p>`);
+}
+function demarrerPresence(){
+  if(presence)return;
+  presence=S.sb.channel("amicale-presence",{config:{presence:{key:S.uid}}});
+  presence.on("presence",{event:"sync"},majPresence).subscribe(async st=>{
+    if(st==="SUBSCRIBED")await presence.track({uid:S.uid,nom:S.profil.nom,initiales:S.profil.initiales,role:S.profil.role,appareil:appareil(),depuis:new Date().toISOString()});});
+}
+function arreterPresence(){if(presence){S.sb.removeChannel(presence);presence=null;}S.enLigne=[];majPresence();}
 function reload(){clearTimeout(reloadH);reloadH=setTimeout(loadAll,250);}
 async function loadAll(){
   if(!S.session)return;
@@ -1198,7 +1226,8 @@ async function start(){
     S.profil=data;S.isAdmin=data.role==="admin";S.myName=data.nom;
     await loadAll();
     if(!channel){channel=S.sb.channel("amicale").on("postgres_changes",{event:"*",schema:"public"},()=>reload()).subscribe();}
-  }else if(channel){S.sb.removeChannel(channel);channel=null;}
+    demarrerPresence();majPresence();
+  }else{if(channel){S.sb.removeChannel(channel);channel=null;}arreterPresence();}
   go();
 }
 (function init(){
