@@ -11,6 +11,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="config.js"></script>
 <script src="acces.js" defer></script>
+<script src="listing.js" defer></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" defer></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" defer></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
@@ -69,8 +70,8 @@ h3{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--mut)
 input,select,textarea{width:100%;font:inherit;padding:11px 12px;border:1px solid var(--line);border-radius:10px;background:var(--card);color:var(--ink);font-size:16px;min-height:46px}
 textarea{min-height:120px;resize:vertical}
 input[type=checkbox]{width:22px;height:22px;min-height:0;flex:none;accent-color:var(--navy2)}
-label.f{display:block;margin:10px 0}
-label.f>span{display:block;font-size:13px;color:var(--mut);margin-bottom:4px}
+label.f,div.f{display:block;margin:10px 0}
+label.f>span,div.f>span{display:block;font-size:13px;color:var(--mut);margin-bottom:4px}
 label.f>span i{font-style:normal;color:var(--bad)}
 .two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .seg{display:flex;flex-wrap:wrap;gap:6px}
@@ -109,6 +110,11 @@ table.prev select{font-size:13px;padding:6px;min-height:36px}
 #toast.on{opacity:1}
 .back{display:inline-block;margin:0 0 6px;color:var(--navy2);text-decoration:none;font-weight:650}
 @media (prefers-color-scheme:dark){.back,a.lnk{color:var(--gold)}}
+.mails{display:flex;flex-wrap:wrap;gap:6px;margin:2px 0 6px}.mails:empty{display:none}
+.mchip{display:inline-flex;align-items:center;gap:4px;background:var(--line);border-radius:16px;padding:3px 4px 3px 10px;font-size:14px;max-width:100%;overflow-wrap:anywhere}
+.mchip button{border:0;background:transparent;color:var(--bad);font-size:18px;line-height:1;padding:0 6px;cursor:pointer}
+.mchip.add{background:var(--okbg);color:var(--ok);padding-right:10px}.mchip.del{background:var(--badbg);color:var(--bad);text-decoration:line-through;padding-right:10px;cursor:pointer}.mchip.del.keep{text-decoration:none;background:var(--line);color:var(--ink)}
+.mailadd{display:flex;gap:8px;align-items:center}.mailadd input{flex:1}
 .ok-t{color:var(--ok)}.bad-t{color:var(--bad)}
 .mono{font-family:ui-monospace,Menlo,monospace;font-size:14px}
 .login{max-width:380px;margin:40px auto}
@@ -189,6 +195,8 @@ const fd=d=>{if(!d)return"";const[y,m,j]=String(d).split("-");return j?`${j}/${m
 const uid=()=>(crypto.randomUUID?crypto.randomUUID():Date.now().toString(36)+Math.random().toString(36).slice(2)).replace(/[^a-zA-Z0-9-]/g,"");
 const noAcc=s=>String(s||"").normalize("NFD").replace(/[̀-ͯ]/g,"");
 const norm=s=>noAcc(s).toLowerCase().replace(/[^a-z0-9]/g,"");
+const mails=s=>[...new Set(String(s||"").toLowerCase().split(/[;,\s]+/).map(x=>x.trim()).filter(Boolean))];
+const mailOk=e=>/^[^@\s,;]+@[^@\s,;]+\.[^@\s,;]+$/.test(e);
 function cfg(){const c={...(S.config||{})};if(!c.saison)delete c.saison;const out={...DEF_CFG,saison:defaultSaison(),...c,comptes:{...DEF_CFG.comptes,...(c.comptes||{})}};return out;}
 function toast(m){const t=$("#toast");t.textContent=m;t.classList.add("on");clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove("on"),3400);}
 function fullName(m){return m?`${m.prenom||""} ${(m.nom||"").toUpperCase()}`.trim():"(adhérent supprimé)";}
@@ -208,7 +216,7 @@ function ibanClean(s){return String(s||"").replace(/\s/g,"").toUpperCase();}
 function ibanFmt(s){return ibanClean(s).replace(/(.{4})/g,"$1 ").trim();}
 function ibanOk(s){s=ibanClean(s);if(!/^[A-Z]{2}\d{2}[A-Z0-9]{10,30}$/.test(s))return false;const r=s.slice(4)+s.slice(0,4);let m=0;for(const ch of r){const v=/[A-Z]/.test(ch)?String(ch.charCodeAt(0)-55):ch;for(const d of v)m=(m*10+(+d))%97;}return m===1;}
 function bicOk(s){return !s||/^[A-Z]{4}[A-Z]{2}[A-Z0-9]{2}([A-Z0-9]{3})?$/.test(String(s).toUpperCase().replace(/\s/g,""));}
-function mailHref(to,subject,body,bcc){const p=[];if(subject)p.push("subject="+encodeURIComponent(subject));if(body)p.push("body="+encodeURIComponent(body));if(bcc)p.push("bcc="+encodeURIComponent(bcc));return "mailto:"+(to?encodeURIComponent(to).replace(/%40/g,"@"):"")+(p.length?"?"+p.join("&"):"");}
+function mailHref(to,subject,body,bcc){const p=[];if(subject)p.push("subject="+encodeURIComponent(subject));if(body)p.push("body="+encodeURIComponent(body));if(bcc)p.push("bcc="+encodeURIComponent(bcc));return "mailto:"+mails(to).map(x=>encodeURIComponent(x).replace(/%40/g,"@")).join(",")+(p.length?"?"+p.join("&"):"");}
 async function copy(txt){try{await navigator.clipboard.writeText(txt);toast("Copié");}catch(e){toast("Copie impossible : sélectionnez le texte manuellement");}}
 function seasons(){const s=new Set([String(cfg().saison),...S.paiements.map(p=>String(p.saison||"")).filter(Boolean)]);return [...s].sort().reverse();}
 function intro(eb,title,sub){return `<div class="intro"><div class="eyebrow">${eb}</div><h2>${title}</h2>${sub?`<p class="sub">${sub}</p>`:""}</div>`;}
@@ -520,9 +528,9 @@ VIEWS.relances={
       :`<div class="note">Aucun adhérent en prélèvement.</div>`}`;
     const dp=$("#dateP");if(dp)dp.onchange=e=>{S._dateP=e.target.value;};
     const vars=m=>({prenom:m?m.prenom||"":"",nom:m?m.nom||"":"",saison:c.saison,montant:eurTxt(m?montantDu(m):c.montant),asso:c.asso,date:fd(S._dateP||c.prochainPrelevement||""),rum:m&&m.prelevement?m.prelevement.rum||"":""});
-    const g=$("#grpR");if(g)g.onclick=()=>mailSheet("Relance groupée",`Cotisation ${c.saison} – ${c.sigle||"AMGP"}`,fill(c.msgRelance.replace(/\s*\{prenom\}/g,""),vars(null)),avecMail.map(m=>m.email),avecMail.map(m=>m.id));
+    const g=$("#grpR");if(g)g.onclick=()=>mailSheet("Relance groupée",`Cotisation ${c.saison} – ${c.sigle||"AMGP"}`,fill(c.msgRelance.replace(/\s*\{prenom\}/g,""),vars(null)),avecMail.flatMap(m=>mails(m.email)),avecMail.map(m=>m.id));
     $$("[data-rel]").forEach(b=>b.onclick=()=>{const m=membre(b.dataset.rel);mailSheet("Relance",`Cotisation ${c.saison} – ${c.sigle||"AMGP"}`,fill(c.msgRelance,vars(m)),[m.email],[m.id],true);});
-    const gp=$("#grpP");if(gp)gp.onclick=()=>{if(!(S._dateP||c.prochainPrelevement))return toast("Indiquez d'abord la date du prélèvement");const L=pr.filter(m=>m.email);mailSheet("Pré-notification groupée",`Prélèvement de votre cotisation ${c.saison}`,fill(c.msgPrenotif.replace(/\s*\{prenom\}/g,"").replace(/ \(mandat SEPA n° \{rum\}\)/,""),{...vars(null),montant:eurTxt(c.montant)}),L.map(m=>m.email),[]);};
+    const gp=$("#grpP");if(gp)gp.onclick=()=>{if(!(S._dateP||c.prochainPrelevement))return toast("Indiquez d'abord la date du prélèvement");const L=pr.filter(m=>m.email);mailSheet("Pré-notification groupée",`Prélèvement de votre cotisation ${c.saison}`,fill(c.msgPrenotif.replace(/\s*\{prenom\}/g,"").replace(/ \(mandat SEPA n° \{rum\}\)/,""),{...vars(null),montant:eurTxt(c.montant)}),L.flatMap(m=>mails(m.email)),[]);};
     $$("[data-pn]").forEach(b=>b.onclick=()=>{if(!(S._dateP||c.prochainPrelevement))return toast("Indiquez d'abord la date du prélèvement");const m=membre(b.dataset.pn);mailSheet("Pré-notification",`Prélèvement de votre cotisation ${c.saison}`,fill(c.msgPrenotif,vars(m)),[m.email],[],true);});
   }
 };
@@ -702,7 +710,7 @@ function dropZone(el,input,cb){
   el.addEventListener("drop",e=>{e.preventDefault();el.classList.remove("over");const f=e.dataTransfer.files[0];if(f)cb(f);});
 }
 async function readTable(f){
-  if(/\.xlsx?$/i.test(f.name||"")){
+  if(/\.(xlsx?|ods)$/i.test(f.name||"")){
     if(!window.XLSX)throw new Error("module Excel non chargé, vérifiez la connexion");
     const wb=XLSX.read(await f.arrayBuffer(),{type:"array"});
     const ws=wb.Sheets[wb.SheetNames[0]];
@@ -751,7 +759,7 @@ function analyseRows(rows){
     const yc=(l.campagne.match(/20\d{2}/)||[])[0];l.saison=yc||l.date.slice(0,4);
     l.ancien=+l.saison<PREMIERE_SAISON;
     l.statutOk=!/rembours|annul|refus|attente|echou|echec|fail|refund|cancel|pending|declin/i.test(noAcc(l.statut));
-    let mm=(l.email&&S.membres.find(m=>(m.email||"").toLowerCase()===l.email))||(l.nom&&S.membres.find(m=>norm(m.nom)===norm(l.nom)&&norm(m.prenom)===norm(l.prenom)));
+    let mm=(l.email&&S.membres.find(m=>mails(m.email).includes(l.email)))||(l.nom&&S.membres.find(m=>norm(m.nom)===norm(l.nom)&&norm(m.prenom)===norm(l.prenom)));
     if(!mm&&l.desc){const d=norm(l.desc);mm=S.membres.find(m=>m.nom&&m.prenom&&d.includes(norm(m.nom))&&d.includes(norm(m.prenom)));}
     l.choix=mm?mm.id:(l.nom?"__new":"");
     return l;
@@ -857,7 +865,7 @@ function memberSheet(id){
       <div class="two"><label class="f"><span>Catégorie</span><select id="fCat"><option value="">À préciser</option>${CATS.map(c=>`<option ${m.categorie===c?"selected":""}>${c}</option>`).join("")}</select></label>
       <label class="f"><span>Instrument</span><input id="fIns" value="${esc(m.instrument)}" list="insL"><datalist id="insL">${[...new Set(S.membres.map(x=>x.instrument).filter(Boolean))].map(x=>`<option value="${esc(x)}">`).join("")}</datalist></label></div>
       ${m.service?`<p class="note">Service d'origine : ${esc(m.service)}</p>`:""}
-      <label class="f"><span>Mail</span><input id="fMail" type="email" value="${esc(m.email)}" autocapitalize="off" autocomplete="email"></label>
+      <div class="f"><span>Mail</span><div id="fMails" class="mails"></div><div class="mailadd"><input id="fMail" type="email" placeholder="${mails(m.email).length?"Ajouter une autre adresse":"Adresse mail"}" autocapitalize="off" autocomplete="email"><button class="btn sm sec" id="fMailAdd" type="button">Ajouter</button></div></div>
       <label class="f"><span>Téléphone</span><input id="fTel" type="tel" value="${esc(m.tel)}" autocomplete="tel"></label>
       ${S.isAdmin?`<label class="f"><span>Cotisation spécifique (€, vide = ${esc(cfg().montant)} €)</span><input id="fMt" type="number" inputmode="decimal" value="${esc(m.montantPerso||"")}"></label>
       <label class="check"><input type="checkbox" id="fPot" ${m.potentiel===true?"checked":""}> Adhérent potentiel (adhésion non confirmée)</label>
@@ -879,8 +887,14 @@ function memberSheet(id){
     </div>`:""}
     <div class="btns"><button class="btn gold full" id="fSave">Enregistrer</button></div>
     ${id?`<h3>Cotisations</h3>${hist.length?`<div class="list">${hist.map(p=>`<div class="row" data-p="${esc(p.id)}"><div class="main"><b>${esc(p.saison)}</b><small>${fd(p.date)}${p.recuNum?" · reçu "+esc(p.recuNum):""}</small></div><div class="right">${eur(p.montant)}<br><span class="chip ${p.mode}">${MODES[p.mode]||esc(p.mode)}</span></div></div>`).join("")}</div>`:`<div class="note">Aucune cotisation enregistrée.</div>`}
-    <div class="btns"><button class="btn" id="fPay">+ Encaisser</button>${m.email?`<a class="btn sec" href="mailto:${esc(m.email)}">Mail</a>`:""}${m.tel?`<a class="btn sec" href="tel:${esc(m.tel)}">Appeler</a>`:""}</div>
+    <div class="btns"><button class="btn" id="fPay">+ Encaisser</button>${m.email?`<a class="btn sec" href="${esc(mailHref(m.email))}">Mail</a>`:""}${m.tel?`<a class="btn sec" href="tel:${esc(m.tel)}">Appeler</a>`:""}</div>
     <div class="btns"><button class="btn danger" id="fDel">Supprimer la fiche</button></div>`:""}`,p=>{
+    const ML=mails(m.email);
+    const drawM=()=>{$("#fMails",p).innerHTML=ML.map((e,i)=>`<span class="mchip">${esc(e)}<button type="button" data-rm="${i}" aria-label="Effacer ${esc(e)}">×</button></span>`).join("");
+      $$("[data-rm]",p).forEach(b=>b.onclick=()=>{ML.splice(+b.dataset.rm,1);drawM();});};
+    const addM=()=>{const v=mails($("#fMail",p).value);if(!v.length)return true;const bad=v.find(e=>!mailOk(e));if(bad){toast("Adresse mail invalide : "+bad);return false;}
+      v.forEach(e=>{if(!ML.includes(e))ML.push(e);});$("#fMail",p).value="";drawM();return true;};
+    $("#fMailAdd",p).onclick=addM;$("#fMail",p).onkeydown=e=>{if(e.key==="Enter"){e.preventDefault();addM();}};drawM();
     if(S.isAdmin){
     $("#pAct",p).onchange=e=>{$("#pBox",p).style.display=e.target.checked?"":"none";};
     const rv=$("#ribVoir",p);if(rv)rv.onclick=e=>{e.preventDefault();voirRib(P.ribPath);};
@@ -893,10 +907,10 @@ function memberSheet(id){
     });
     }
     $("#fSave",p).onclick=async()=>{
-      const d={...m,nom:$("#fNom",p).value.trim(),prenom:$("#fPre",p).value.trim(),categorie:$("#fCat",p).value,instrument:$("#fIns",p).value.trim(),email:$("#fMail",p).value.trim().toLowerCase(),tel:$("#fTel",p).value.trim(),montantPerso:S.isAdmin&&$("#fMt",p).value?num($("#fMt",p).value):"",actif:S.isAdmin?$("#fAct",p).checked:true,potentiel:S.isAdmin?$("#fPot",p).checked:false};
+      const d={...m,nom:$("#fNom",p).value.trim(),prenom:$("#fPre",p).value.trim(),categorie:$("#fCat",p).value,instrument:$("#fIns",p).value.trim(),email:"",tel:$("#fTel",p).value.trim(),montantPerso:S.isAdmin&&$("#fMt",p).value?num($("#fMt",p).value):"",actif:S.isAdmin?$("#fAct",p).checked:true,potentiel:S.isAdmin?$("#fPot",p).checked:false};
       delete d.id;
       if(!d.nom||!d.prenom)return toast("Le nom et le prénom sont obligatoires");
-      if(d.email&&!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(d.email))return toast("Adresse mail invalide");
+      if(!addM())return;d.email=ML.join(", ");
       const pa=S.isAdmin&&$("#pAct",p).checked;
       if(!S.isAdmin){delete d.prelevement;const dup=S.membres.find(x=>norm(x.nom)===norm(d.nom)&&norm(x.prenom)===norm(d.prenom));if(dup)return toast(`${fullName(dup)} existe déjà dans la liste`);}
       else d.prelevement={...P,actif:pa,titulaire:$("#pTit",p).value.trim(),iban:ibanClean($("#pIban",p).value),bic:$("#pBic",p).value.trim().toUpperCase().replace(/\s/g,""),rum:$("#pRum",p).value.trim(),dateSignature:$("#pSig",p).value,sequence:$("#pSeq",p).value};
@@ -945,7 +959,7 @@ function paySheet(mid,editId){
         <label class="f"><span>Nom <i>*</i></span><input id="yNN" autocapitalize="characters" autocomplete="off"></label></div>
         <div class="two"><label class="f"><span>Catégorie</span><select id="yNC"><option value="">À préciser</option>${CATS.map(c=>`<option>${c}</option>`).join("")}</select></label>
         <label class="f"><span>Instrument</span><input id="yNI"></label></div>
-        <div class="two"><label class="f"><span>Mail</span><input id="yNM" type="email" autocapitalize="off" autocomplete="off"></label>
+        <div class="two"><label class="f"><span>Mail</span><input id="yNM" type="text" inputmode="email" autocapitalize="off" autocomplete="off"></label>
         <label class="f"><span>Téléphone</span><input id="yNT" type="tel" autocomplete="off"></label></div>
       </div>
       <label class="f"><span>Mode de règlement</span><div class="seg" id="yMode">${MODES_OK.map(([k,l])=>`<button type="button" data-v="${k}" class="${k===mode?"on":""}">${l}</button>`).join("")}</div></label>
@@ -981,9 +995,9 @@ function paySheet(mid,editId){
       if(($("#yDate",p).value||today())<PREMIERE_SAISON+"-01-01")return toast(`Pas de saisie datée d'avant ${PREMIERE_SAISON}`);
       let m=membre(sel),created=false;
       if(sel==="__new"){
-        const nm={nom:$("#yNN",p).value.trim(),prenom:$("#yNP",p).value.trim(),categorie:$("#yNC",p).value,instrument:$("#yNI",p).value.trim(),email:$("#yNM",p).value.trim().toLowerCase(),tel:$("#yNT",p).value.trim(),actif:true,potentiel:false,cree:new Date().toISOString()};
+        const nm={nom:$("#yNN",p).value.trim(),prenom:$("#yNP",p).value.trim(),categorie:$("#yNC",p).value,instrument:$("#yNI",p).value.trim(),email:mails($("#yNM",p).value).join(", "),tel:$("#yNT",p).value.trim(),actif:true,potentiel:false,cree:new Date().toISOString()};
         if(!nm.nom||!nm.prenom)return toast("Prénom et nom du nouvel adhérent obligatoires");
-        if(nm.email&&!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(nm.email))return toast("Adresse mail invalide");
+        if(mails(nm.email).some(e=>!mailOk(e)))return toast("Adresse mail invalide");
         const dup=S.membres.find(x=>norm(x.nom)===norm(nm.nom)&&norm(x.prenom)===norm(nm.prenom));
         if(dup)return toast(`${fullName(dup)} existe déjà : choisissez-le dans la liste`);
         const nid=uid();if(!await put("membres/"+nid,nm))return;
