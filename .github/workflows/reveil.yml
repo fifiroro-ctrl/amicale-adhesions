@@ -1,0 +1,33 @@
+name: Réveil de la base
+
+# Évite la mise en veille de la base Supabase gratuite (après 7 jours sans activité)
+# et garde ce dépôt actif pour que GitHub ne désactive pas cette tâche.
+on:
+  schedule:
+    - cron: "17 6 * * 1,4"   # lundi et jeudi, 7 h 17 (heure de Paris en hiver)
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  reveil:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Interroger la base
+        run: |
+          URL=$(sed -n 's/^window.SUPABASE_URL *= *"\(.*\)";.*/\1/p' config.js)
+          KEY=$(sed -n 's/^window.SUPABASE_ANON_KEY *= *"\(.*\)";.*/\1/p' config.js)
+          if [ "$URL" = "A_COMPLETER" ] || [ -z "$URL" ]; then echo "config.js pas encore complété"; exit 0; fi
+          curl -fsS -X POST "$URL/rest/v1/rpc/reveil" -H "apikey: $KEY" -H "Authorization: Bearer $KEY" -H "Content-Type: application/json" -d '{}'
+      - name: Garder le dépôt actif (une fois par mois)
+        run: |
+          if [ "$(date +%d)" -le 4 ]; then
+            date -u +%Y-%m-%d > .derniere-activite
+            git config user.name "reveil-auto"
+            git config user.email "reveil-auto@users.noreply.github.com"
+            git add .derniere-activite
+            git commit -m "Activité mensuelle" || true
+            git push || true
+          fi
