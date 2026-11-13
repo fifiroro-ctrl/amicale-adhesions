@@ -11,7 +11,6 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="config.js"></script>
 <script src="acces.js" defer></script>
-<script src="listing.js" defer></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" defer></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" defer></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
@@ -1187,6 +1186,127 @@ async function start(){
   document.addEventListener("visibilitychange",()=>{if(!document.hidden&&S.session)reload();});
   setInterval(()=>{if(S.session&&!document.hidden)reload();},60000);
   start();
+})();
+</script>
+<script>
+/* Écran « Mise à jour du listing » (administrateur) :
+   compare un nouveau listing du personnel aux fiches, ajoute les nouveaux,
+   met à jour mails et téléphones, efface les adresses qui n'y figurent plus. */
+(function(){
+  if(typeof VIEWS==="undefined")return;
+  SUBVIEWS.push("listing");
+  const plusShell=VIEWS.plus.shell;
+  VIEWS.plus.shell=()=>{const h=plusShell();if(!S.isAdmin)return h;
+    return h.replace('<a class="row" href="#import"','<a class="row" href="#listing" style="text-decoration:none;color:inherit"><div class="main"><b>Mise à jour du listing</b><small>Nouveau listing du personnel · mails et téléphones</small></div><div class="right">›</div></a><a class="row" href="#import"');};
+
+  const baseNom=s=>norm(String(s||"").replace(/\(.*?\)/g,""));
+  const chiffres=s=>String(s||"").replace(/\D/g,"").replace(/^33/,"0");
+  let A=null; // analyse en cours
+  let mode="remplacer";
+
+  function lire(rows){
+    rows=rows.map(r=>r.map(c=>String(c??"").trim())).filter(r=>r.some(Boolean));
+    const hi=rows.slice(0,15).findIndex(r=>r.some(c=>/^nom( de famille)?$/.test(noAcc(c).toLowerCase())));
+    if(hi<0)throw new Error("colonne « NOM » introuvable");
+    const H=rows[hi].map(h=>noAcc(h).toLowerCase().trim());
+    const f=(...pats)=>{for(const p of pats){const i=H.findIndex(h=>p.test(h));if(i>=0)return i;}return -1;};
+    const c={nom:f(/^nom( de famille)?$/,/^nom\b/),prenom:f(/^prenom/,/prenom/),service:f(/^service/),
+      email:f(/e-?mail/,/courriel/,/^mail/),tel:f(/portable/,/mobile/,/telephone/,/^tel/),categorie:f(/categorie/)};
+    if(c.prenom<0)throw new Error("colonne « PRÉNOM » introuvable");
+    const g=(r,k)=>c[k]>=0?String(r[c[k]]||"").trim():"";
+    return rows.slice(hi+1).map(r=>{
+      const cat=g(r,"categorie");
+      return {nom:g(r,"nom"),prenom:g(r,"prenom"),service:g(r,"service"),email:mails(g(r,"email")).filter(mailOk),tel:g(r,"tel"),
+        categorie:CATS.find(x=>norm(x)===norm(cat))||""};
+    }).filter(l=>l.nom&&l.prenom);
+  }
+
+  function analyser(lignes){
+    const pris=new Set(),nouveaux=[],modifs=[];
+    lignes.forEach(l=>{
+      const libres=S.membres.filter(m=>!pris.has(m.id));
+      let cand=libres.filter(m=>norm(m.nom)===norm(l.nom)&&norm(m.prenom)===norm(l.prenom));
+      if(!cand.length)cand=libres.filter(m=>baseNom(m.nom)===baseNom(l.nom)&&norm(m.prenom)===norm(l.prenom));
+      if(cand.length>1&&l.service)cand=cand.filter(m=>norm(m.service)===norm(l.service)).concat(cand.filter(m=>norm(m.service)!==norm(l.service)));
+      const m=cand[0];
+      if(!m){nouveaux.push({l,on:true});return;}
+      pris.add(m.id);
+      const avant=mails(m.email),plus=l.email.filter(e=>!avant.includes(e)),moins=avant.filter(e=>!l.email.includes(e));
+      const telNouv=l.tel&&chiffres(l.tel)!==chiffres(m.tel)?l.tel:"",telPlus=!l.tel&&m.tel?m.tel:"";
+      const nom=l.nom!==m.nom?l.nom:"",service=l.service&&l.service!==(m.service||"")?l.service:"",categorie=l.categorie&&!m.categorie?l.categorie:"";
+      if(plus.length||moins.length||telNouv||telPlus||nom||service||categorie)
+        modifs.push({m,l,avant,plus,moins,garder:new Set(),telNouv,telPlus,nom,service,categorie,on:true});
+    });
+    const absents=S.membres.filter(m=>!pris.has(m.id)&&m.actif!==false&&(/listing/i.test(m.source||"")||m.potentiel===true)).map(m=>({m,on:false}));
+    return {lignes,nouveaux,modifs,absents};
+  }
+
+  // Ce qui sera réellement écrit pour une modification, selon le mode.
+  function cible(x){
+    const out={};
+    const emails=mode==="remplacer"?[...x.l.email,...x.moins.filter(e=>x.garder.has(e))]:[...x.avant,...x.plus];
+    const avant=x.avant.join(", "),apres=[...new Set(emails)].join(", ");
+    if(apres!==avant)out.email=apres;
+    if(x.telNouv&&(mode==="remplacer"||!x.m.tel))out.tel=x.telNouv;
+    if(x.nom)out.nom=x.nom;
+    if(x.service)out.service=x.service;
+    if(x.categorie)out.categorie=x.categorie;
+    return out;
+  }
+  const utile=x=>Object.keys(cible(x)).length>0;
+
+  function rendre(){
+    const el=$("#lsRes");if(!el)return;
+    if(!A){el.innerHTML="";return;}
+    const mods=A.modifs.filter(utile);
+    const nbEff=mods.filter(x=>x.on).reduce((n,x)=>n+(mode==="remplacer"?x.moins.filter(e=>!x.garder.has(e)).length:0),0);
+    el.innerHTML=`<div class="card"><b>${A.lignes.length} personnes dans le listing</b><p class="note" style="margin-bottom:0">${A.nouveaux.length} nouvelle${A.nouveaux.length>1?"s":""} · ${mods.length} fiche${mods.length>1?"s":""} à mettre à jour · ${A.absents.length} absente${A.absents.length>1?"s":""} du listing</p></div>
+      ${mods.length?`<h3>Mises à jour</h3><p class="note">${mode==="remplacer"?"Barré en rouge : adresse effacée. Touchez-la pour la conserver.":"Mode compléter : rien n'est effacé."}</p>
+      <div class="list">${A.modifs.map((x,i)=>{if(!utile(x))return"";const t=cible(x);
+        const chips=[...x.plus.map(e=>`<span class="mchip add">+ ${esc(e)}</span>`),
+          ...(mode==="remplacer"?x.moins.map(e=>`<span class="mchip del ${x.garder.has(e)?"keep":""}" data-g="${i}" data-e="${esc(e)}">${esc(e)}</span>`):[])].join(" ");
+        const autres=[t.nom?`nom : ${esc(x.m.nom)} → ${esc(t.nom)}`:"",t.tel?`tél. : ${esc(x.m.tel||"—")} → ${esc(t.tel)}`:"",(x.telPlus&&mode==="remplacer")?`tél. ${esc(x.telPlus)} absent du listing (conservé)`:"",
+          t.service?`service : ${esc(t.service)}`:"",t.categorie?`catégorie : ${esc(t.categorie)}`:""].filter(Boolean).join(" · ");
+        return`<div class="row" style="cursor:default;align-items:flex-start"><input type="checkbox" data-mo="${i}" ${x.on?"checked":""} style="margin-top:4px"><div class="main"><b>${esc(fullName(x.m))}</b>${chips?`<div class="mails" style="margin-top:6px">${chips}</div>`:""}${autres?`<small>${autres}</small>`:""}</div></div>`;}).join("")}</div>`:""}
+      ${A.nouveaux.length?`<h3>Nouveaux (ajoutés comme adhérents potentiels)</h3><div class="list">${A.nouveaux.map((x,i)=>`<label class="row" style="cursor:pointer"><input type="checkbox" data-nv="${i}" ${x.on?"checked":""}><div class="main"><b>${esc(x.l.prenom)} ${esc(x.l.nom.toUpperCase())}</b><small>${esc([x.l.service,x.l.email.join(", "),x.l.tel].filter(Boolean).join(" · ")||"—")}</small></div></label>`).join("")}</div>`:""}
+      ${A.absents.length?`<h3>Absents du nouveau listing</h3><p class="note">Cochez ceux dont la fiche doit être désactivée (elle reste consultable, rien n'est supprimé).</p><div class="list">${A.absents.map((x,i)=>`<label class="row" style="cursor:pointer"><input type="checkbox" data-ab="${i}" ${x.on?"checked":""}><div class="main"><b>${esc(fullName(x.m))}</b><small>${esc([x.m.service,aJour(x.m)?"à jour de cotisation":""].filter(Boolean).join(" · ")||"—")}</small></div></label>`).join("")}</div>`:""}
+      <div class="btns"><button class="btn gold full" id="lsGo">Appliquer${nbEff?` (${nbEff} adresse${nbEff>1?"s":""} effacée${nbEff>1?"s":""})`:""}</button></div><p class="note" id="lsSt"></p>`;
+    $$("[data-mo]",el).forEach(b=>b.onchange=()=>{A.modifs[+b.dataset.mo].on=b.checked;rendre();});
+    $$("[data-nv]",el).forEach(b=>b.onchange=()=>{A.nouveaux[+b.dataset.nv].on=b.checked;});
+    $$("[data-ab]",el).forEach(b=>b.onchange=()=>{A.absents[+b.dataset.ab].on=b.checked;});
+    $$("[data-g]",el).forEach(b=>b.onclick=()=>{const x=A.modifs[+b.dataset.g],e=b.dataset.e;x.garder.has(e)?x.garder.delete(e):x.garder.add(e);rendre();});
+    $("#lsGo",el).onclick=appliquer;
+  }
+
+  async function appliquer(){
+    const mods=A.modifs.filter(x=>x.on&&utile(x)),nv=A.nouveaux.filter(x=>x.on),ab=A.absents.filter(x=>x.on);
+    if(!mods.length&&!nv.length&&!ab.length)return toast("Rien à appliquer");
+    if(!await confirmBox(`Mettre à jour ${mods.length} fiche${mods.length>1?"s":""}, ajouter ${nv.length} personne${nv.length>1?"s":""} et désactiver ${ab.length} fiche${ab.length>1?"s":""} ?`,"Appliquer",false))return;
+    const st=$("#lsSt"),go=$("#lsGo");go.disabled=true;let ok=0,ko=0,n=0;const tot=mods.length+nv.length+ab.length;
+    const pas=r=>{r?ok++:ko++;n++;st.textContent=`${n} / ${tot}…`;};
+    const source="Listing personnel "+new Date().toLocaleDateString("fr-FR",{month:"long",year:"numeric"});
+    for(const x of mods)pas(await upd("membres/"+x.m.id,{...cible(x),modifie:new Date().toISOString()},true));
+    for(const x of nv)pas(await put("membres/"+uid(),{nom:x.l.nom,prenom:x.l.prenom,service:x.l.service,categorie:x.l.categorie,email:x.l.email.join(", "),tel:x.l.tel,instrument:"",actif:true,potentiel:true,source,cree:new Date().toISOString()}));
+    for(const x of ab)pas(await upd("membres/"+x.m.id,{actif:false,modifie:new Date().toISOString()},true));
+    go.disabled=false;
+    toast(ko?`${ok} enregistrés, ${ko} en échec`:`Listing appliqué : ${ok} modification${ok>1?"s":""}`);
+    if(!ko){A=null;st.textContent="";$("#lsRes").innerHTML=`<div class="banner ok">Listing appliqué : ${mods.length} fiche${mods.length>1?"s":""} mise${mods.length>1?"s":""} à jour, ${nv.length} ajoutée${nv.length>1?"s":""}, ${ab.length} désactivée${ab.length>1?"s":""}.</div>`;}
+  }
+
+  VIEWS.listing={
+    shell:()=>`<a class="back" href="#plus">‹ Plus</a>${intro("Le personnel","Mise à jour du listing","Déposez le nouveau listing : rien n'est écrit avant « Appliquer ».")}
+      <div class="seg" id="lsMode"><button data-v="remplacer" class="${mode==="remplacer"?"on":""}">Le listing fait foi</button><button data-v="completer" class="${mode==="completer"?"on":""}">Compléter seulement</button></div>
+      <p class="note">${"« Le listing fait foi » : les mails et téléphones des fiches sont remplacés par ceux du listing, les adresses qui n'y figurent plus sont effacées. « Compléter seulement » : ajoute ce qui manque, n'efface rien."}</p>
+      <label class="drop" id="lsDrop" style="margin-top:12px"><input type="file" id="lsFile" accept=".ods,.xlsx,.xls,.csv,application/vnd.oasis.opendocument.spreadsheet,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv" hidden>Glissez le listing (ODS, Excel ou CSV) ici ou touchez pour le choisir</label>
+      <p class="note">Colonnes reconnues : NOM, PRÉNOM, Service, E-mail (plusieurs adresses séparées par « ; »), Téléphone portable, Catégorie.</p>
+      <div id="lsRes"></div>`,
+    bind(){
+      $$("#lsMode button").forEach(b=>b.onclick=()=>{mode=b.dataset.v;$$("#lsMode button").forEach(x=>x.classList.toggle("on",x===b));rendre();});
+      dropZone($("#lsDrop"),$("#lsFile"),async f=>{try{A=analyser(lire(await readTable(f)));rendre();}catch(e){toast("Fichier illisible : "+e.message);}});
+      rendre();
+    },
+    update(){}
+  };
 })();
 </script>
 </body>
