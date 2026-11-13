@@ -1,0 +1,9 @@
+{
+  "name": "Amicale — Adhésions",
+  "short_name": "Amicale",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#16244a",
+  "theme_color": "#16244a",
+  "icons": [{ "src": "icone.png", "sizes": "512x512", "type": "image/png" }]
+}

@@ -1,0 +1,1178 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#16244a">
+<title>Amicale — Adhésions</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icone.png">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="config.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" defer></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" defer></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
+<style>
+:root{
+  --navy:#16244a;--navy2:#24386b;--gold:#c9a13b;--bg:#f3f4f8;--card:#fff;--ink:#1a1d29;--mut:#6b7080;--line:#e3e5ee;
+  --ok:#1f8a5b;--okbg:#e4f5ec;--warn:#b5651d;--warnbg:#fdf0e3;--bad:#c0392b;--badbg:#fbe9e7;--r:14px;--side:240px;
+}
+@media (prefers-color-scheme:dark){
+  :root{--bg:#0f1220;--card:#1a1e30;--ink:#eceef5;--mut:#9aa0b4;--line:#2a2f45;--ok:#64d49d;--okbg:#14372a;--warn:#edb46e;--warnbg:#3a2a17;--bad:#f28b80;--badbg:#3d1d1a}
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 -apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,sans-serif}
+:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
+header{position:sticky;top:0;z-index:5;background:var(--navy);color:#fff;padding:calc(env(safe-area-inset-top) + 10px) 16px 12px}
+header .t1{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#cbd2e5}
+header .t2{font-size:20px;font-weight:750;display:flex;align-items:center;gap:8px;letter-spacing:-.3px}
+header .t2 .note-sym{color:var(--gold)}
+header .saison{margin-left:auto;font-size:12px;background:var(--gold);color:var(--navy);padding:3px 10px;border-radius:20px;font-weight:700}
+main{padding:14px 14px calc(env(safe-area-inset-bottom) + 92px);max-width:780px;margin:0 auto}
+nav#tabs{position:fixed;left:0;right:0;bottom:0;z-index:6;background:var(--card);border-top:1px solid var(--line);display:flex;padding:6px 4px calc(env(safe-area-inset-bottom) + 6px)}
+nav#tabs a{flex:1;text-align:center;text-decoration:none;color:var(--mut);font-size:11px;padding:4px 0;min-height:44px}
+nav#tabs a svg{display:block;margin:0 auto 2px;width:24px;height:24px}
+nav#tabs a.on{color:var(--navy2);font-weight:650}
+@media (prefers-color-scheme:dark){nav#tabs a.on{color:var(--gold)}}
+.intro{margin:6px 2px 16px}
+.eyebrow{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--mut);font-weight:700}
+h2{font-size:27px;font-weight:750;letter-spacing:-.6px;line-height:1.15;margin:4px 0 4px}
+.sub{color:var(--mut);margin:0;font-size:14px}
+h3{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--mut);margin:22px 4px 8px}
+.card{background:var(--card);border-radius:var(--r);padding:14px;margin-bottom:12px;box-shadow:0 2px 10px rgba(22,36,74,.05);border:1px solid var(--line)}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
+.stat{background:var(--card);border-radius:var(--r);padding:12px 14px;border:1px solid var(--line);border-top:3px solid var(--gold)}
+.stat b{display:block;font-size:26px;font-variant-numeric:tabular-nums}
+.stat span{font-size:13px;color:var(--mut)}
+.list{background:var(--card);border-radius:var(--r);overflow:hidden;margin-bottom:12px;border:1px solid var(--line)}
+.row{display:flex;align-items:center;gap:12px;padding:12px 14px;border-bottom:1px solid var(--line);cursor:pointer;min-height:56px}
+.row:last-child{border-bottom:0}
+.row .main{flex:1;min-width:0}
+.row .main b{display:block;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row .main small{color:var(--mut);font-size:13px}
+.row .right{text-align:right;font-size:14px;white-space:nowrap}
+.av{width:38px;height:38px;flex:none;border-radius:50%;display:grid;place-items:center;background:var(--line);color:var(--navy2);font-size:13px;font-weight:700}
+@media (prefers-color-scheme:dark){.av{color:var(--gold)}}
+.chip{display:inline-block;font-size:11px;font-weight:650;padding:2px 8px;border-radius:20px;background:var(--line);color:var(--ink);margin:1px 0 1px 4px}
+.chip.ok{background:var(--okbg);color:var(--ok)}.chip.warn{background:var(--warnbg);color:var(--warn)}.chip.bad{background:var(--badbg);color:var(--bad)}
+.chip.sumup{background:#e6f0ff;color:#2457c5}.chip.helloasso{background:#ece8ff;color:#5b3fd1}.chip.especes{background:var(--okbg);color:var(--ok)}
+.chip.prelevement{background:#fff4d6;color:#8a6500}.chip.pot{background:var(--line);color:var(--mut)}
+@media (prefers-color-scheme:dark){.chip.sumup{color:#9abaff;background:#1b2e50}.chip.helloasso{color:#c4b4ff;background:#302651}.chip.prelevement{color:#e6c56d;background:#3a2e14}}
+.btn{appearance:none;border:0;border-radius:12px;padding:12px 16px;min-height:44px;font:inherit;font-weight:650;background:var(--navy2);color:#fff;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:6px;text-decoration:none}
+.btn.full{width:100%}.btn.sec{background:var(--card);color:var(--ink);border:1px solid var(--line)}.btn.gold{background:var(--gold);color:var(--navy)}.btn.danger{background:var(--badbg);color:var(--bad)}
+.btn.sm{padding:7px 11px;min-height:36px;font-size:14px;border-radius:10px}
+.btn:disabled{opacity:.45}
+.btns{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}
+.btns .btn{flex:1}
+input,select,textarea{width:100%;font:inherit;padding:11px 12px;border:1px solid var(--line);border-radius:10px;background:var(--card);color:var(--ink);font-size:16px;min-height:46px}
+textarea{min-height:120px;resize:vertical}
+input[type=checkbox]{width:22px;height:22px;min-height:0;flex:none;accent-color:var(--navy2)}
+label.f{display:block;margin:10px 0}
+label.f>span{display:block;font-size:13px;color:var(--mut);margin-bottom:4px}
+label.f>span i{font-style:normal;color:var(--bad)}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.seg{display:flex;flex-wrap:wrap;gap:6px}
+.seg button{flex:1 1 30%;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:10px;padding:9px 6px;min-height:44px;font:inherit;font-size:14px}
+.seg button.on{background:var(--navy2);color:#fff;border-color:var(--navy2)}
+.search{margin-bottom:10px}
+.filters{display:flex;gap:6px;overflow-x:auto;margin-bottom:10px;padding-bottom:2px}
+.filters button{white-space:nowrap;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:20px;padding:7px 13px;font:inherit;font-size:14px}
+.filters button.on{background:var(--navy2);color:#fff;border-color:var(--navy2)}
+.fab{position:fixed;right:18px;bottom:calc(env(safe-area-inset-bottom) + 80px);z-index:7;width:56px;height:56px;border-radius:50%;border:0;background:var(--gold);color:var(--navy);font-size:30px;line-height:1;box-shadow:0 4px 14px rgba(0,0,0,.25)}
+.empty{text-align:center;color:var(--mut);padding:26px 10px;line-height:1.7}
+.note{font-size:13px;color:var(--mut);margin:6px 2px}
+.banner{background:var(--warnbg);color:var(--warn);border-radius:12px;padding:10px 12px;font-size:14px;margin-bottom:12px}
+.banner.ok{background:var(--okbg);color:var(--ok)}
+.sheet{position:fixed;inset:0;z-index:20;background:rgba(10,14,30,.45);display:flex;align-items:flex-end;justify-content:center}
+.sheet.hidden{display:none}
+.sheet .panel{background:var(--bg);width:100%;max-width:780px;max-height:94vh;overflow:auto;border-radius:18px 18px 0 0;padding:0 14px calc(env(safe-area-inset-bottom) + 20px)}
+.sheet .bar{position:sticky;top:0;background:var(--bg);display:flex;align-items:center;gap:8px;padding:14px 0 10px;z-index:2}
+.sheet .bar b{flex:1;font-size:19px;font-weight:750}
+.x{border:0;background:var(--line);color:var(--ink);width:36px;height:36px;border-radius:50%;font-size:18px}
+.drop{display:block;border:2px dashed var(--line);border-radius:12px;padding:16px;text-align:center;color:var(--mut);cursor:pointer;font-size:14px}
+.drop.over{border-color:var(--gold);background:var(--warnbg)}
+.recu{background:#fff;color:#111;border-radius:12px;padding:18px;font-size:14px;border:1px solid #ddd}
+.recu h4{margin:0 0 4px;font-size:16px}
+.recu .n{float:right;font-weight:700}
+.recu .amt{font-size:22px;font-weight:700;margin:10px 0}
+.recu small{color:#666}
+.ventil{border-top:1px solid var(--line);margin-top:8px}
+.ventil div{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--line);font-size:14px}
+.recu .ventil,.recu .ventil div{border-color:#e5e5e5}
+table.prev{width:100%;border-collapse:collapse;font-size:13px}
+table.prev td,table.prev th{padding:6px 4px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+table.prev select{font-size:13px;padding:6px;min-height:36px}
+.check{display:flex;align-items:center;gap:10px;padding:8px 0}
+#toast{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom) + 92px);transform:translateX(-50%);background:var(--navy);color:#fff;border:1px solid var(--gold);padding:10px 16px;border-radius:12px;font-size:14px;z-index:40;opacity:0;pointer-events:none;transition:opacity .2s;max-width:90vw}
+#toast.on{opacity:1}
+.back{display:inline-block;margin:0 0 6px;color:var(--navy2);text-decoration:none;font-weight:650}
+@media (prefers-color-scheme:dark){.back,a.lnk{color:var(--gold)}}
+.ok-t{color:var(--ok)}.bad-t{color:var(--bad)}
+.mono{font-family:ui-monospace,Menlo,monospace;font-size:14px}
+.login{max-width:380px;margin:40px auto}
+.row.annule .main b{text-decoration:line-through;opacity:.6}
+.big{font-size:18px;padding:18px}
+
+/* ---- Grand écran : menu latéral ---- */
+@media (min-width:900px){
+  header{position:fixed;left:0;top:0;width:var(--side);height:120px;padding:26px 20px 0;background:var(--navy);z-index:8}
+  header .t2{flex-wrap:wrap;font-size:24px}
+  header .saison{margin:6px 0 0}
+  nav#tabs{top:120px;bottom:0;right:auto;width:var(--side);flex-direction:column;justify-content:flex-start;background:var(--navy);border:0;padding:18px 14px;gap:4px}
+  nav#tabs a{flex:none;display:flex;align-items:center;gap:12px;font-size:15px;color:#c9cfe0;padding:11px 14px;border-radius:10px;text-align:left;min-height:0}
+  nav#tabs a svg{margin:0;width:20px;height:20px}
+  nav#tabs a.on,nav#tabs a:hover{background:var(--navy2);color:#fff}
+  nav#tabs a.on{box-shadow:inset 3px 0 var(--gold);font-weight:650}
+  main{margin-left:var(--side);max-width:1060px;padding:36px 48px 60px}
+  h2{font-size:36px}
+  .grid{grid-template-columns:repeat(4,1fr);gap:14px}
+  .stat{padding:18px}
+  .stat b{font-size:32px}
+  .fab{bottom:32px;right:36px}
+  #toast{bottom:32px;left:calc(50% + var(--side)/2)}
+  .sheet{align-items:center}
+  .sheet .panel{max-width:640px;max-height:90vh;border-radius:18px;padding:0 22px 22px}
+  .cols{display:grid;grid-template-columns:1.5fr 1fr;gap:18px;align-items:start}
+}
+</style>
+</head>
+<body>
+<header>
+  <div class="t1">Amicale de la Musique des Gardiens de la Paix</div>
+  <div class="t2"><span class="note-sym">♩</span><span>Adhésions</span><span class="saison" id="hsaison"></span></div>
+</header>
+<nav id="tabs"></nav>
+<main id="view"><div class="empty">Chargement…</div></main>
+<div id="sheet" class="sheet hidden"><div class="panel" id="panel"></div></div>
+<div id="toast" role="status"></div>
+
+<script>
+"use strict";
+/* ---------- Constantes ---------- */
+const MODES={especes:"Espèces",sumup:"SumUp",helloasso:"HelloAsso",cheque:"Chèque",virement:"Virement",prelevement:"Prélèvement"};
+const CATS=["BF","Hie","Retraité","Sympathisant"];
+const PREMIERE_SAISON=2026;
+function defaultSaison(){return String(new Date().getFullYear());}
+const DEF_CFG={
+  asso:"Amicale de la Musique des Gardiens de la Paix",sigle:"AMGP",adresse:"",montant:10,
+  tresorier:"",emailContact:"",ics:"",ibanAsso:"",bicAsso:"",prochainPrelevement:"",
+  libSurplus:"Surplus / dons",fraisSumup:1.75,
+  comptes:{cotis:"756000",surplus:"754100",frais:"627000",especes:"530000",cheque:"511200",virement:"512000",prelevement:"512000",sumup:"511300",helloasso:"511400"},
+  msgRelance:"Bonjour {prenom},\n\nSauf erreur de notre part, votre cotisation {saison} à l'{asso} ({montant}) n'a pas encore été réglée.\n\nVous pouvez la régler en espèces lors d'une répétition, par carte (SumUp) ou en ligne via HelloAsso.\n\nMerci et à bientôt,\nLe bureau",
+  msgPrenotif:"Bonjour {prenom},\n\nNous vous informons que votre cotisation {saison} d'un montant de {montant} sera prélevée le {date} sur votre compte bancaire (mandat SEPA n° {rum}).\n\nAucune démarche n'est nécessaire de votre part.\n\nCordialement,\nLe bureau de l'{asso}"
+};
+const ICONS={
+  accueil:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>',
+  adherents:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="8" r="4"/><path d="M2 21c0-4 3-6 7-6s7 2 7 6"/><circle cx="18" cy="9" r="3"/><path d="M17 15c3 0 5 2 5 5"/></svg>',
+  paiements:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20M6 15h4"/></svg>',
+  evenements:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/></svg>',
+  plus:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg>'
+};
+
+/* ---------- Etat ---------- */
+const S={sb:null,session:null,profil:null,profils:[],mandats:[],paiementsAll:[],isAdmin:false,uid:null,myName:"",ready:false,
+  config:null,membres:[],paiements:[],evenements:[],inscriptions:[],loaded:{},offline:false,
+  q:"",mf:"membres",mc:"",pSaison:null,pMode:"",view:null,readOnly:false};
+
+/* ---------- Utilitaires ---------- */
+const $=(s,r=document)=>r.querySelector(s);
+const $$=(s,r=document)=>[...r.querySelectorAll(s)];
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const num=v=>{if(typeof v==="number")return v;const n=parseFloat(String(v??"").replace(/[^\d,.\-]/g,"").replace(",","."));return isNaN(n)?0:n;};
+const r2=n=>Math.round((Number(n)||0)*100)/100;
+const eur=n=>(Number(n)||0).toLocaleString("fr-FR",{style:"currency",currency:"EUR"});
+const eurTxt=n=>(Number(n)||0).toFixed(2).replace(".",",")+" €";
+const today=()=>{const t=new Date();t.setMinutes(t.getMinutes()-t.getTimezoneOffset());return t.toISOString().slice(0,10);};
+const fd=d=>{if(!d)return"";const[y,m,j]=String(d).split("-");return j?`${j}/${m}/${y}`:d;};
+const uid=()=>(crypto.randomUUID?crypto.randomUUID():Date.now().toString(36)+Math.random().toString(36).slice(2)).replace(/[^a-zA-Z0-9-]/g,"");
+const noAcc=s=>String(s||"").normalize("NFD").replace(/[̀-ͯ]/g,"");
+const norm=s=>noAcc(s).toLowerCase().replace(/[^a-z0-9]/g,"");
+function cfg(){const c={...(S.config||{})};if(!c.saison)delete c.saison;const out={...DEF_CFG,saison:defaultSaison(),...c,comptes:{...DEF_CFG.comptes,...(c.comptes||{})}};return out;}
+function toast(m){const t=$("#toast");t.textContent=m;t.classList.add("on");clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove("on"),3400);}
+function fullName(m){return m?`${m.prenom||""} ${(m.nom||"").toUpperCase()}`.trim():"(adhérent supprimé)";}
+function initials(m){return ((m.prenom||"?")[0]+(m.nom||"?")[0]).toUpperCase();}
+function membre(id){return S.membres.find(m=>m.id===id);}
+function membresTri(){return [...S.membres].sort((a,b)=>(a.nom||"").localeCompare(b.nom||"","fr")||(a.prenom||"").localeCompare(b.prenom||"","fr"));}
+function paysSaison(mid,s){return S.paiements.filter(p=>p.membreId===mid&&String(p.saison)===String(s||cfg().saison));}
+function aJour(m){return paysSaison(m.id).length>0;}
+function isPot(m){return m.potentiel===true&&!aJour(m);}
+function isMembre(m){return m.actif!==false&&!isPot(m);}
+function prelevActif(m){return !!(m.prelevement&&m.prelevement.actif);}
+function montantDu(m){return num(m&&m.montantPerso)||num(cfg().montant);}
+function ventil(p){const t=r2(num(p.montant));let c=p.cotis!=null&&p.cotis!==""?r2(num(p.cotis)):Math.min(t,num(cfg().montant));c=Math.min(c,t);return{total:t,cotis:c,surplus:r2(t-c)};}
+function fraisDe(p){return p.mode==="sumup"?r2(num(p.montant)*num(cfg().fraisSumup)/100):0;}
+function fill(tpl,v){return tpl.replace(/\{(\w+)\}/g,(_,k)=>v[k]??"");}
+function ibanClean(s){return String(s||"").replace(/\s/g,"").toUpperCase();}
+function ibanFmt(s){return ibanClean(s).replace(/(.{4})/g,"$1 ").trim();}
+function ibanOk(s){s=ibanClean(s);if(!/^[A-Z]{2}\d{2}[A-Z0-9]{10,30}$/.test(s))return false;const r=s.slice(4)+s.slice(0,4);let m=0;for(const ch of r){const v=/[A-Z]/.test(ch)?String(ch.charCodeAt(0)-55):ch;for(const d of v)m=(m*10+(+d))%97;}return m===1;}
+function bicOk(s){return !s||/^[A-Z]{4}[A-Z]{2}[A-Z0-9]{2}([A-Z0-9]{3})?$/.test(String(s).toUpperCase().replace(/\s/g,""));}
+function mailHref(to,subject,body,bcc){const p=[];if(subject)p.push("subject="+encodeURIComponent(subject));if(body)p.push("body="+encodeURIComponent(body));if(bcc)p.push("bcc="+encodeURIComponent(bcc));return "mailto:"+(to?encodeURIComponent(to).replace(/%40/g,"@"):"")+(p.length?"?"+p.join("&"):"");}
+async function copy(txt){try{await navigator.clipboard.writeText(txt);toast("Copié");}catch(e){toast("Copie impossible : sélectionnez le texte manuellement");}}
+function seasons(){const s=new Set([String(cfg().saison),...S.paiements.map(p=>String(p.saison||"")).filter(Boolean)]);return [...s].sort().reverse();}
+function intro(eb,title,sub){return `<div class="intro"><div class="eyebrow">${eb}</div><h2>${title}</h2>${sub?`<p class="sub">${sub}</p>`:""}</div>`;}
+
+/* ---------- Ecritures (Supabase) ---------- */
+const COLS={
+  membres:["id","nom","prenom","categorie","service","instrument","email","tel","actif","potentiel","montantPerso","source","derniereRelance","cree","modifie"],
+  mandats:["membreId","actif","titulaire","iban","bic","rum","dateSignature","sequence","ribPath","ribNom"],
+  paiements:["id","membreId","nomAffiche","saison","montant","cotis","mode","date","ref","note","recuNum","compta","encaissePar","annule","annulePar","annuleLe","annuleMotif","signalement","signalementLe","signalementTraite","remisLe","cree"],
+  evenements:["id","titre","date","heure","lieu","places","description"]
+};
+const NULLABLE=new Set(["montantPerso","derniereRelance","modifie","dateSignature","compta","remisLe","annuleLe","annulePar","places","cotis","signalementLe","membreId","encaissePar"]);
+function clean(t,o){const r={};for(const k of COLS[t]){if(o[k]===undefined)continue;let v=o[k];if(v===""&&NULLABLE.has(k))v=null;r[k]=v;}return r;}
+function errMsg(e){if(!e)return"erreur";const m=e.message||String(e);if(/row-level security|permission|42501/i.test(m))return"vous n'avez pas les droits pour cette action";if(/check constraint/i.test(m))return"donnée refusée (saison ou date avant 2026 ?)";if(/duplicate key/i.test(m))return"cet élément existe déjà";if(/Failed to fetch|NetworkError/i.test(m))return"pas de connexion";return m;}
+function canWrite(){if(!S.sb||!S.session){toast("Vous n'êtes pas connecté");return false;}return true;}
+async function chk(p){const {data,error}=await p;if(error)throw error;return data;}
+async function put(path,data){
+  if(!canWrite())return false;
+  const [col,id]=path.split("/");
+  try{
+    if(col==="config"){await chk(S.sb.from("config").upsert({id:1,data}));}
+    else if(col==="membres"){const {prelevement,...m}=data;await chk(S.isAdmin?S.sb.from("membres").upsert(clean("membres",{...m,id})):S.sb.from("membres").insert(clean("membres",{...m,id})));
+      if(prelevement&&S.isAdmin)await chk(S.sb.from("mandats").upsert(clean("mandats",{...prelevement,membreId:id})));}
+    else if(COLS[col]){await chk(S.sb.from(col).upsert(clean(col,{...data,id})));}
+    else throw new Error("table inconnue "+col);
+    reload();return true;
+  }catch(e){toast("Enregistrement impossible : "+errMsg(e));return false;}
+}
+async function insertPaiement(data){
+  if(!canWrite())return null;
+  try{const row=await chk(S.sb.from("paiements").insert(clean("paiements",data)).select().single());reload();return row;}
+  catch(e){toast("Enregistrement impossible : "+errMsg(e));return null;}
+}
+async function upd(path,data,silent){
+  if(!canWrite())return false;
+  const [col,id]=path.split("/");
+  try{
+    if(col==="membres"){const {prelevement,...m}=data;if(Object.keys(m).length)await chk(S.sb.from("membres").update(clean("membres",m)).eq("id",id));
+      if(prelevement)await chk(S.sb.from("mandats").upsert(clean("mandats",{...prelevement,membreId:id})));}
+    else await chk(S.sb.from(col).update(clean(col,data)).eq("id",id));
+    reload();return true;
+  }catch(e){if(!silent)toast("Mise à jour impossible : "+errMsg(e));return false;}
+}
+async function del(path){
+  if(!canWrite())return false;
+  const [col,id]=path.split("/");
+  try{await chk(S.sb.from(col).delete().eq("id",id));reload();return true;}catch(e){toast("Suppression impossible : "+errMsg(e));return false;}
+}
+async function saveFile(filename,data){
+  try{const blob=data instanceof Blob?data:new Blob([data],{type:/\.csv$/.test(filename)?"text/csv;charset=utf-8":/\.json$/.test(filename)?"application/json":"application/octet-stream"});
+    const u=URL.createObjectURL(blob),a=document.createElement("a");a.href=u;a.download=filename;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),4000);return true;}
+  catch(e){toast("Téléchargement impossible : "+e.message);return false;}
+}
+function nomProfil(id){const p=S.profils.find(x=>x.id===id);return p?p.nom:"—";}
+
+/* ---------- Feuilles (modales) ---------- */
+function openSheet(title,html,mount){
+  const p=$("#panel");p.innerHTML=`<div class="bar"><b>${esc(title)}</b><button class="x" data-close aria-label="Fermer">×</button></div>${html}`;
+  $("#sheet").classList.remove("hidden");document.body.style.overflow="hidden";p.scrollTop=0;
+  $$("[data-close]",p).forEach(b=>b.onclick=closeSheet);
+  if(mount)mount(p);
+}
+function closeSheet(){$("#sheet").classList.add("hidden");document.body.style.overflow="";$("#panel").innerHTML="";}
+$("#sheet").addEventListener("click",e=>{if(e.target.id==="sheet")closeSheet();});
+function confirmBox(msg,ok="Confirmer",danger=true){
+  return new Promise(res=>{
+    const host=document.createElement("div");host.className="sheet";host.style.zIndex=30;host.style.alignItems="center";
+    host.innerHTML=`<div class="panel" style="border-radius:18px;max-width:420px;margin:20px;padding:18px"><p style="margin:0 0 14px">${esc(msg)}</p><div class="btns"><button class="btn sec" data-r="0">Annuler</button><button class="btn ${danger?"danger":""}" data-r="1">${esc(ok)}</button></div></div>`;
+    document.body.appendChild(host);
+    host.querySelectorAll("[data-r]").forEach(b=>b.onclick=()=>{host.remove();res(b.dataset.r==="1");});
+  });
+}
+
+/* ---------- Navigation ---------- */
+const ADMIN_TABS=[["accueil","Accueil"],["adherents","Adhérents"],["paiements","Cotisations"],["evenements","Événements"],["plus","Plus"]];
+const CAISSE_TABS=[["accueil","Accueil"],["adherents","Adhérents"],["paiements","Mes encaissements"],["plus","Compte"]];
+const SUBVIEWS=["relances","prelevements","compta","import","reglages","sauvegarde","caisses"];
+function tabsFor(){return S.isAdmin?ADMIN_TABS:CAISSE_TABS;}
+function allowed(v){if(!S.session||!S.profil)return v==="login";return S.isAdmin?(ADMIN_TABS.some(t=>t[0]===v)||SUBVIEWS.includes(v)):CAISSE_TABS.some(t=>t[0]===v);}
+function currentView(){if(!S.session||!S.profil)return"login";const h=location.hash.replace("#","");return allowed(h)?h:"accueil";}
+function renderTabs(){
+  const v=currentView(),parent=SUBVIEWS.includes(v)?"plus":v;
+  const tabs=v==="login"?[]:tabsFor();
+  $("#tabs").style.display=tabs.length>1?"":"none";
+  $("#tabs").innerHTML=tabs.map(([k,l])=>`<a href="#${k}" class="${k===parent?"on":""}">${ICONS[k]}<span>${l}</span></a>`).join("");
+}
+function go(){
+  const v=currentView();S.view=v;renderTabs();
+  $("#hsaison").textContent=S.profil?"Saison "+cfg().saison:"";
+  const V=VIEWS[v];$("#view").innerHTML=V.shell();if(V.bind)V.bind();refresh(true);window.scrollTo(0,0);
+}
+let rafH=0;
+function refresh(now){cancelAnimationFrame(rafH);if(now){doRefresh();return;}rafH=requestAnimationFrame(doRefresh);}
+function doRefresh(){const V=VIEWS[S.view];if(V&&V.update)V.update();$("#hsaison").textContent=S.profil?"Saison "+cfg().saison:"";}
+window.addEventListener("hashchange",go);
+
+function dataBanner(){
+  if(S.offline)return`<div class="banner">Les données ne répondent pas pour le moment : vérifiez la connexion. L'affichage peut être incomplet.</div>`;
+  return"";
+}
+function memberRow(m,right){return `<div class="row" data-m="${esc(m.id)}"><div class="av">${esc(initials(m))}</div><div class="main"><b>${esc(fullName(m))}</b><small>${esc([m.categorie,m.instrument,m.service&&!m.instrument?m.service:""].filter(Boolean).join(" · ")||"—")}</small></div><div class="right">${right}</div></div>`;}
+function statusChips(m){return (prelevActif(m)?'<span class="chip prelevement">Prél.</span>':"")+(aJour(m)?'<span class="chip ok">À jour</span>':(isPot(m)?'<span class="chip pot">Potentiel</span>':'<span class="chip bad">À régler</span>'));}
+
+/* ================= VUES ================= */
+const VIEWS={};
+
+/* ----- Accueil ----- */
+VIEWS.accueil={
+  shell:()=>`<div id="ban"></div>${S.isAdmin?intro("La vie de l'Amicale","Votre Amicale, au quotidien.","Adhésions, cotisations et rendez-vous de l'association."):intro("Bonjour "+esc((S.profil.nom||"").split(" ")[0]),"Encaisser une cotisation","Choisissez l'adhérent, le montant et le mode de règlement.")}<div id="acc"></div>`,
+  update(){
+    $("#ban").innerHTML=dataBanner();
+    if(!S.isAdmin)return caisseAccueil();
+    const c=cfg(),actifs=S.membres.filter(m=>m.actif!==false);
+    const membres=actifs.filter(m=>!isPot(m)),pots=actifs.filter(isPot);
+    const ajour=membres.filter(aJour).length,prel=membres.filter(prelevActif).length;
+    const aRegler=membres.filter(m=>!aJour(m)&&!prelevActif(m)).length;
+    const ps=S.paiements.filter(p=>String(p.saison)===String(c.saison));
+    const tot=ps.reduce((s,p)=>s+num(p.montant),0),sur=ps.reduce((s,p)=>s+ventil(p).surplus,0);
+    const parMode=Object.keys(MODES).map(k=>[k,ps.filter(p=>p.mode===k).reduce((s,p)=>s+num(p.montant),0)]).filter(x=>x[1]>0);
+    const nonCompta=S.paiements.filter(p=>!p.compta).length;
+    const mandatsKo=membres.filter(m=>prelevActif(m)&&!(ibanOk(m.prelevement.iban)&&m.prelevement.rum&&m.prelevement.dateSignature)).length;
+    const prochain=[...S.evenements].filter(e=>(e.date||"")>=today()).sort((a,b)=>(a.date+(a.heure||"")).localeCompare(b.date+(b.heure||"")))[0];
+    const todo=[];
+    if(aRegler)todo.push([`${aRegler} cotisation${aRegler>1?"s":""} à relancer`,"#relances","bad"]);
+    if(mandatsKo)todo.push([`${mandatsKo} mandat${mandatsKo>1?"s":""} de prélèvement incomplet${mandatsKo>1?"s":""}`,"#prelevements","warn"]);
+    if(nonCompta)todo.push([`${nonCompta} encaissement${nonCompta>1?"s":""} à basculer en compta`,"#compta","warn"]);
+    const sig=S.paiementsAll.filter(p=>p.signalement&&!p.signalementTraite&&!p.annule).length;
+    if(sig)todo.unshift([`${sig} erreur${sig>1?"s":""} signalée${sig>1?"s":""} par les caissiers`,"#caisses","bad"]);
+    const esp=S.paiements.filter(p=>p.mode==="especes"&&!p.remisLe&&p.encaissePar&&p.encaissePar!==S.uid).reduce((t,p)=>t+num(p.montant),0);
+    if(esp>0)todo.push([`${eur(esp)} d'espèces encore chez les caissiers`,"#caisses","warn"]);
+    if(pots.length)todo.push([`${pots.length} adhérent${pots.length>1?"s":""} potentiel${pots.length>1?"s":""} à convaincre`,"#adherents","pot"]);
+    $("#acc").innerHTML=`
+      <div class="grid">
+        <div class="stat"><b>${membres.length}</b><span>adhérents</span></div>
+        <div class="stat"><b class="ok-t">${ajour}</b><span>à jour ${esc(c.saison)}</span></div>
+        <div class="stat"><b class="${aRegler?"bad-t":""}">${aRegler}</b><span>à relancer</span></div>
+        <div class="stat"><b>${pots.length}</b><span>potentiels</span></div>
+      </div>
+      <div class="btns"><button class="btn gold" id="qPay">+ Encaisser</button><button class="btn" id="qMem">+ Adhérent</button></div>
+      <div class="cols"><div>
+      <h3>À faire</h3>
+      ${todo.length?`<div class="list">${todo.map(([t,h,c])=>`<a class="row" href="${h}" style="text-decoration:none;color:inherit"><span class="chip ${c}" style="margin:0">●</span><div class="main"><b style="white-space:normal">${t}</b></div><div class="right">›</div></a>`).join("")}</div>`:`<div class="banner ok">Rien d'urgent : tout est à jour.</div>`}
+      ${prochain?`<h3>Prochain événement</h3><div class="list"><div class="row" data-evt="${esc(prochain.id)}"><div class="main"><b>${esc(prochain.titre)}</b><small>${fd(prochain.date)} ${esc(prochain.heure||"")} · ${esc(prochain.lieu||"")}</small></div><div class="right">${inscrits(prochain.id).length} inscrit${inscrits(prochain.id).length>1?"s":""}</div></div></div>`:""}
+      </div><div>
+      <h3>Encaissé ${esc(c.saison)}</h3>
+      <div class="card"><div style="font-size:28px;font-weight:750">${eur(tot)}</div>
+        ${sur>0?`<div class="note" style="margin:2px 0 6px">dont ${eur(sur)} de ${esc(c.libSurplus.toLowerCase())}</div>`:""}
+        ${parMode.length?parMode.map(([k,v])=>`<div style="display:flex;justify-content:space-between;margin-top:6px"><span class="chip ${k}" style="margin:0">${MODES[k]}</span><span>${eur(v)}</span></div>`).join(""):`<div class="note">Aucun encaissement pour l'instant.</div>`}
+      </div>
+      ${prel?`<p class="note">${prel} adhérent${prel>1?"s":""} en prélèvement.</p>`:""}
+      </div></div>`;
+    $("#qPay").onclick=()=>paySheet();$("#qMem").onclick=()=>memberSheet();
+    $$("[data-evt]").forEach(r=>r.onclick=()=>eventSheet(r.dataset.evt));
+  }
+};
+
+function maCaisse(uid){return S.paiements.filter(p=>p.mode==="especes"&&!p.remisLe&&p.encaissePar===uid);}
+function caisseAccueil(){
+  const mine=S.paiementsAll.filter(p=>p.encaissePar===S.uid).sort((a,b)=>(b.cree||"").localeCompare(a.cree||""));
+  const esp=maCaisse(S.uid),tot=esp.reduce((t,p)=>t+num(p.montant),0);
+  $("#acc").innerHTML=`
+    <div class="btns"><button class="btn gold full big" id="qPay">+ Encaisser une cotisation</button></div>
+    <div class="btns"><button class="btn sec" id="qMem">+ Nouvel adhérent</button></div>
+    <div class="grid"><div class="stat"><b>${eur(tot)}</b><span>espèces à remettre au trésorier</span></div><div class="stat"><b>${mine.filter(p=>!p.annule).length}</b><span>encaissements saisis</span></div></div>
+    <h3>Mes derniers encaissements</h3>
+    ${mine.length?`<div class="list">${mine.slice(0,8).map(payRow).join("")}</div><a class="back" href="#paiements">Tout voir ›</a>`:`<div class="empty">Aucun encaissement pour l'instant.</div>`}`;
+  $("#qPay").onclick=()=>paySheet();$("#qMem").onclick=()=>memberSheet();
+  $$("[data-p]").forEach(r=>r.onclick=()=>payDetail(r.dataset.p));
+}
+function payRow(p){const m=membre(p.membreId);return`<div class="row ${p.annule?"annule":""}" data-p="${esc(p.id)}"><div class="av">${m?esc(initials(m)):"?"}</div><div class="main"><b>${esc(m?fullName(m):p.nomAffiche)}</b><small>${fd(p.date)}${p.recuNum?" · "+esc(p.recuNum):""}${S.isAdmin&&p.encaissePar&&p.encaissePar!==S.uid?" · par "+esc(nomProfil(p.encaissePar)):""}</small></div><div class="right"><b>${eur(p.montant)}</b><br>${p.annule?'<span class="chip bad">Annulé</span>':`<span class="chip ${p.mode}">${MODES[p.mode]||esc(p.mode)}</span>`}${p.signalement&&!p.signalementTraite&&!p.annule?'<span class="chip warn">Signalé</span>':""}${p.compta?'<span class="chip ok">Compta</span>':""}</div></div>`;}
+
+VIEWS.caisses={
+  shell:()=>`<a class="back" href="#plus">‹ Plus</a>${intro("Qui détient quoi","Caisses et signalements","Les espèces encaissées par chacun, et les erreurs qu'on vous signale.")}<div id="cx"></div>`,
+  update(){
+    const sig=S.paiementsAll.filter(p=>p.signalement&&!p.signalementTraite&&!p.annule);
+    const ppl=S.profils.map(pr=>{const L=maCaisse(pr.id);return{pr,L,tot:L.reduce((t,p)=>t+num(p.montant),0)};});
+    $("#cx").innerHTML=`
+      <h3>Erreurs signalées (${sig.length})</h3>
+      ${sig.length?`<div class="list">${sig.map(p=>`<div class="row" data-p="${esc(p.id)}"><div class="main"><b>${esc(fullName(membre(p.membreId))||p.nomAffiche)} · ${eur(p.montant)}</b><small>« ${esc(p.signalement)} » — ${esc(nomProfil(p.encaissePar))}, ${fd(String(p.signalementLe||"").slice(0,10))}</small></div><div class="right">›</div></div>`).join("")}</div>`:`<div class="note">Aucune erreur signalée.</div>`}
+      <h3>Espèces non remises</h3>
+      <div class="list">${ppl.map(({pr,L,tot})=>`<div class="row" style="cursor:default"><div class="av">${esc(pr.initiales)}</div><div class="main"><b>${esc(pr.nom)}${pr.id===S.uid?" (vous)":""}</b><small>${L.length} encaissement${L.length>1?"s":""} en espèces</small></div><div class="right"><b>${eur(tot)}</b>${tot>0&&pr.id!==S.uid?`<br><button class="btn sm" data-remis="${esc(pr.id)}">Espèces remises</button>`:""}</div></div>`).join("")}</div>
+      <p class="note">« Espèces remises » note que la personne vous a donné l'argent : son compteur repart à zéro. Les encaissements restent dans l'historique.</p>`;
+    $$("[data-p]").forEach(r=>r.onclick=()=>payDetail(r.dataset.p));
+    $$("[data-remis]").forEach(b=>b.onclick=async()=>{const pr=S.profils.find(x=>x.id===b.dataset.remis),L=maCaisse(pr.id),tot=L.reduce((t,p)=>t+num(p.montant),0);
+      if(!await confirmBox(`Confirmer que ${pr.nom} vous a remis ${eurTxt(tot)} en espèces (${L.length} encaissement${L.length>1?"s":""}) ?`,"Confirmer",false))return;
+      try{await chk(S.sb.from("paiements").update({remisLe:today()}).in("id",L.map(p=>p.id)));toast("Remise enregistrée");reload();}catch(e){toast("Impossible : "+errMsg(e));}});
+  }
+};
+
+/* ----- Adhérents ----- */
+VIEWS.adherents={
+  shell:()=>`<div id="ban"></div>${intro("Le cœur de l'association","Les adhérents","Coordonnées et suivi de chaque cotisation.")}
+    <input class="search" id="q" type="search" placeholder="Rechercher un nom, un instrument…" value="${esc(S.q)}">
+    <div class="filters" id="mf">${(S.isAdmin?[["membres","Membres"],["ajour","À jour"],["aregler","À régler"],["pot","Potentiels"],["prel","Prélèvement"],["anciens","Anciens"],["tous","Tous"]]:[["membres","Membres"],["ajour","À jour"],["aregler","À régler"],["pot","Potentiels"]]).map(([k,l])=>`<button data-f="${k}" class="${S.mf===k?"on":""}">${l}</button>`).join("")}</div>
+    <div class="filters" id="mc">${[["","Toutes catégories"],...CATS.map(c=>[c,c]),["-","À préciser"]].map(([k,l])=>`<button data-c="${esc(k)}" class="${S.mc===k?"on":""}">${esc(l)}</button>`).join("")}</div>
+    <div id="ml"></div><button class="fab" id="fab" aria-label="Nouvel adhérent">+</button>`,
+  bind(){
+    $("#q").oninput=e=>{S.q=e.target.value;this.update();};
+    $$("#mf button").forEach(b=>b.onclick=()=>{S.mf=b.dataset.f;$$("#mf button").forEach(x=>x.classList.toggle("on",x===b));this.update();});
+    $$("#mc button").forEach(b=>b.onclick=()=>{S.mc=b.dataset.c;$$("#mc button").forEach(x=>x.classList.toggle("on",x===b));this.update();});
+    $("#fab").onclick=()=>memberSheet();
+  },
+  update(){
+    $("#ban").innerHTML=dataBanner();
+    const q=norm(S.q),f=S.mf;
+    let L=membresTri();
+    if(f==="anciens")L=L.filter(m=>m.actif===false);
+    else if(f!=="tous")L=L.filter(m=>m.actif!==false);
+    if(f==="membres")L=L.filter(m=>!isPot(m));
+    if(f==="ajour")L=L.filter(aJour);
+    if(f==="aregler")L=L.filter(m=>!aJour(m)&&!isPot(m));
+    if(f==="pot")L=L.filter(isPot);
+    if(f==="prel")L=L.filter(prelevActif);
+    if(S.mc==="-")L=L.filter(m=>!m.categorie);else if(S.mc)L=L.filter(m=>m.categorie===S.mc);
+    if(q)L=L.filter(m=>norm(`${m.nom}${m.prenom}${m.instrument}${m.email}${m.service}`).includes(q));
+    $("#ml").innerHTML=L.length?`<div class="list">${L.map(m=>memberRow(m,statusChips(m))).join("")}</div><p class="note">${L.length} fiche${L.length>1?"s":""}</p>`
+      :`<div class="empty">${S.membres.length?"Aucun résultat.":"Votre liste commence ici.<br>Touchez + pour ajouter un adhérent."}</div>`;
+    $$("[data-m]").forEach(r=>r.onclick=()=>memberSheet(r.dataset.m));
+  }
+};
+
+/* ----- Cotisations ----- */
+VIEWS.paiements={
+  shell:()=>`<div id="ban"></div>${S.isAdmin?intro("Les encaissements","Cotisations","Espèces, SumUp, HelloAsso, chèques, virements et prélèvements."):intro("Votre activité","Mes encaissements","Ce que vous avez saisi. Une erreur ? Ouvrez l'encaissement et signalez-la.")}
+    <div class="two"><select id="ps" aria-label="Saison"></select><select id="pm" aria-label="Mode"><option value="">Tous les modes</option>${Object.entries(MODES).map(([k,l])=>`<option value="${k}">${l}</option>`).join("")}</select></div>
+    <div class="btns"><button class="btn gold" id="pAdd">+ Encaisser</button>${S.isAdmin?'<a class="btn sec" href="#import">Importer HelloAsso / SumUp</a>':""}</div>
+    <div id="pl"></div>`,
+  bind(){
+    $("#pm").value=S.pMode;
+    $("#ps").onchange=e=>{S.pSaison=e.target.value;this.update();};
+    $("#pm").onchange=e=>{S.pMode=e.target.value;this.update();};
+    $("#pAdd").onclick=()=>paySheet();
+  },
+  update(){
+    $("#ban").innerHTML=dataBanner();
+    const ss=seasons();if(!S.pSaison||!ss.includes(S.pSaison))S.pSaison=String(cfg().saison);
+    $("#ps").innerHTML=ss.map(s=>`<option ${s===S.pSaison?"selected":""}>${esc(s)}</option>`).join("");
+    let L=S.paiementsAll.filter(p=>String(p.saison)===S.pSaison&&(!S.pMode||p.mode===S.pMode)&&(S.isAdmin||p.encaissePar===S.uid)).sort((a,b)=>(b.date||"").localeCompare(a.date||"")||(b.cree||"").localeCompare(a.cree||""));
+    const tot=L.filter(p=>!p.annule).reduce((s,p)=>s+num(p.montant),0);
+    $("#pl").innerHTML=L.length?`<div class="list">${L.map(payRow).join("")}</div><p class="note">${(n=>`${n} encaissement${n>1?"s":""}`)(L.filter(p=>!p.annule).length)} · total ${eur(tot)}</p>`
+      :`<div class="empty">Aucun encaissement pour cette sélection.</div>`;
+    $$("[data-p]").forEach(r=>r.onclick=()=>payDetail(r.dataset.p));
+  }
+};
+
+/* ----- Événements ----- */
+function inscrits(evtId){return S.inscriptions.filter(i=>i.evenementId===evtId);}
+VIEWS.evenements={
+  shell:()=>`<div id="ban"></div>${intro("Se retrouver","Les événements","Concerts, répétitions, assemblées : qui vient ?")}<div id="el"></div><button class="fab" id="fab" aria-label="Nouvel événement">+</button>`,
+  bind(){const f=$("#fab");if(f)f.onclick=()=>eventEdit();},
+  update(){
+    $("#ban").innerHTML=dataBanner();
+    const t=today();
+    const up=[...S.evenements].filter(e=>(e.date||"")>=t).sort((a,b)=>(a.date+(a.heure||"")).localeCompare(b.date+(b.heure||"")));
+    const past=[...S.evenements].filter(e=>(e.date||"")<t).sort((a,b)=>(b.date||"").localeCompare(a.date||""));
+    const row=e=>{const n=inscrits(e.id).length;
+      return`<div class="row" data-e="${esc(e.id)}"><div class="main"><b>${esc(e.titre)}</b><small>${fd(e.date)} ${esc(e.heure||"")}${e.lieu?" · "+esc(e.lieu):""}</small></div><div class="right">${n}${e.places?"/"+esc(e.places):""} inscrit${n>1?"s":""}</div></div>`;};
+    $("#el").innerHTML=(up.length?`<div class="list">${up.map(row).join("")}</div>`:`<div class="empty">Concert, rencontre ou assemblée…<br>Aucun événement à venir.</div>`)
+      +(past.length?`<h3>Passés</h3><div class="list">${past.slice(0,15).map(row).join("")}</div>`:"");
+    $$("[data-e]").forEach(r=>r.onclick=()=>eventSheet(r.dataset.e));
+  }
+};
+
+/* ----- Plus ----- */
+VIEWS.plus={
+  shell:()=>!S.isAdmin?`${intro("Votre espace","Mon compte","")}${compteHtml()}`:`${intro("Votre espace","Plus","Relances, banque, comptabilité et réglages.")}<div class="list">
+    ${[["relances","Relances et mails","Cotisations à régler · pré-notification des prélèvements"],
+       ["prelevements","Prélèvements SEPA","Préparer le fichier à déposer à la banque"],
+       ["compta","Bascule en compta","Exporter les écritures pour le logiciel comptable"],
+       ["import","Importer HelloAsso / SumUp","Fichier Excel ou CSV des paiements"],
+       ["caisses","Caisses et signalements","Espèces détenues par chacun · erreurs signalées"],
+       ["sauvegarde","Sauvegarde","Exporter ou restaurer toutes les données"],
+       ["reglages","Réglages","Association · cotisation · banque · comptes"]]
+      .map(([k,t,s])=>`<a class="row" href="#${k}" style="text-decoration:none;color:inherit"><div class="main"><b>${t}</b><small>${s}</small></div><div class="right">›</div></a>`).join("")}
+    <div class="row" id="expM"><div class="main"><b>Exporter les adhérents</b><small>Fichier CSV (Excel, Numbers)</small></div><div class="right">›</div></div>
+  </div>${compteHtml()}<p class="note">Sur iPhone : dans Safari, touchez Partager puis « Sur l'écran d'accueil » pour ouvrir l'appli comme une application.</p>`,
+  bind(){const e=$("#expM");if(e)e.onclick=exportMembres;bindCompte();}
+};
+
+function compteHtml(){return`<h3>Mon compte</h3><div class="list"><div class="row" style="cursor:default"><div class="av">${esc(S.profil.initiales)}</div><div class="main"><b>${esc(S.profil.nom)}</b><small>${esc(S.session.user.email)} · ${S.isAdmin?"administrateur":"caissier"}</small></div></div>
+  <div class="row" id="mdp"><div class="main"><b>Changer mon mot de passe</b></div><div class="right">›</div></div>
+  <div class="row" id="deco"><div class="main"><b class="bad-t">Se déconnecter</b></div></div></div>`;}
+function bindCompte(){
+  $("#deco").onclick=async()=>{await S.sb.auth.signOut();};
+  $("#mdp").onclick=()=>openSheet("Nouveau mot de passe",`<div class="card"><label class="f"><span>Nouveau mot de passe (8 caractères minimum)</span><input id="np" type="password" autocomplete="new-password"></label></div><button class="btn gold full" id="npOk">Enregistrer</button>`,p=>{
+    $("#npOk",p).onclick=async()=>{const v=$("#np",p).value;if(v.length<8)return toast("8 caractères minimum");const {error}=await S.sb.auth.updateUser({password:v});if(error)return toast("Impossible : "+errMsg(error));toast("Mot de passe changé");closeSheet();};});
+}
+
+/* ----- Relances ----- */
+VIEWS.relances={
+  shell:()=>`<a class="back" href="#plus">‹ Plus</a>${intro("Garder le lien","Relances et mails","Les adhérents potentiels et les prélèvements sont exclus des relances.")}<div id="rl"></div>`,
+  update(){
+    const c=cfg();
+    const aR=membresTri().filter(m=>isMembre(m)&&!aJour(m)&&!prelevActif(m));
+    const pr=membresTri().filter(m=>isMembre(m)&&prelevActif(m));
+    const avecMail=aR.filter(m=>m.email),sansMail=aR.filter(m=>!m.email);
+    const dateP=S._dateP||c.prochainPrelevement||"";
+    $("#rl").innerHTML=`
+      <h3>Cotisations ${esc(c.saison)} à régler (${aR.length})</h3>
+      ${aR.length?`<div class="btns"><button class="btn gold" id="grpR" ${avecMail.length?"":"disabled"}>Mail groupé (${avecMail.length})</button></div>
+      <div class="list">${aR.map(m=>`<div class="row"><div class="av">${esc(initials(m))}</div><div class="main"><b>${esc(fullName(m))}</b><small>${m.email?esc(m.email):(m.tel?"Tél. "+esc(m.tel):"Ni mail ni téléphone")}${m.derniereRelance?" · relancé le "+fd(m.derniereRelance):""}</small></div><div class="right">${m.email?`<button class="btn sm" data-rel="${esc(m.id)}">Relancer</button>`:(m.tel?`<a class="btn sm sec" href="sms:${esc(m.tel)}">SMS</a>`:"")}</div></div>`).join("")}</div>
+      ${sansMail.length?`<p class="note">${sansMail.length} adhérent${sansMail.length>1?"s":""} sans adresse mail : à relancer de vive voix ou par SMS.</p>`:""}`
+      :`<div class="banner ok">Tout le monde est à jour (hors prélèvements et potentiels).</div>`}
+      <h3>Pré-notification des prélèvements (${pr.length})</h3>
+      ${pr.length?`<label class="f"><span>Date du prélèvement</span><input type="date" id="dateP" value="${esc(dateP)}"></label>
+      <div class="btns"><button class="btn gold" id="grpP">Mail groupé (${pr.filter(m=>m.email).length})</button></div>
+      <div class="list">${pr.map(m=>`<div class="row"><div class="av">${esc(initials(m))}</div><div class="main"><b>${esc(fullName(m))}</b><small>${eur(montantDu(m))} · ${m.email?esc(m.email):"pas de mail"}</small></div><div class="right">${m.email?`<button class="btn sm sec" data-pn="${esc(m.id)}">Prévenir</button>`:""}</div></div>`).join("")}</div>
+      <p class="note">La règle SEPA impose de prévenir chaque adhérent au moins 14 jours avant le prélèvement (sauf délai plus court indiqué dans le mandat).</p>`
+      :`<div class="note">Aucun adhérent en prélèvement.</div>`}`;
+    const dp=$("#dateP");if(dp)dp.onchange=e=>{S._dateP=e.target.value;};
+    const vars=m=>({prenom:m?m.prenom||"":"",nom:m?m.nom||"":"",saison:c.saison,montant:eurTxt(m?montantDu(m):c.montant),asso:c.asso,date:fd(S._dateP||c.prochainPrelevement||""),rum:m&&m.prelevement?m.prelevement.rum||"":""});
+    const g=$("#grpR");if(g)g.onclick=()=>mailSheet("Relance groupée",`Cotisation ${c.saison} – ${c.sigle||"AMGP"}`,fill(c.msgRelance.replace(/\s*\{prenom\}/g,""),vars(null)),avecMail.map(m=>m.email),avecMail.map(m=>m.id));
+    $$("[data-rel]").forEach(b=>b.onclick=()=>{const m=membre(b.dataset.rel);mailSheet("Relance",`Cotisation ${c.saison} – ${c.sigle||"AMGP"}`,fill(c.msgRelance,vars(m)),[m.email],[m.id],true);});
+    const gp=$("#grpP");if(gp)gp.onclick=()=>{if(!(S._dateP||c.prochainPrelevement))return toast("Indiquez d'abord la date du prélèvement");const L=pr.filter(m=>m.email);mailSheet("Pré-notification groupée",`Prélèvement de votre cotisation ${c.saison}`,fill(c.msgPrenotif.replace(/\s*\{prenom\}/g,"").replace(/ \(mandat SEPA n° \{rum\}\)/,""),{...vars(null),montant:eurTxt(c.montant)}),L.map(m=>m.email),[]);};
+    $$("[data-pn]").forEach(b=>b.onclick=()=>{if(!(S._dateP||c.prochainPrelevement))return toast("Indiquez d'abord la date du prélèvement");const m=membre(b.dataset.pn);mailSheet("Pré-notification",`Prélèvement de votre cotisation ${c.saison}`,fill(c.msgPrenotif,vars(m)),[m.email],[],true);});
+  }
+};
+function mailSheet(title,subject,body,emails,relanceIds,single){
+  openSheet(title,`
+    ${single?`<label class="f"><span>À</span><input value="${esc(emails[0])}" readonly></label>`:`<label class="f"><span>Destinataires en copie cachée (${emails.length})</span><textarea readonly style="min-height:70px">${esc(emails.join(", "))}</textarea></label><div class="btns"><button class="btn sm sec" id="cpE">Copier les adresses</button></div>`}
+    <label class="f"><span>Objet</span><input id="mS" value="${esc(subject)}"></label>
+    <label class="f"><span>Message</span><textarea id="mB" style="min-height:220px">${esc(body)}</textarea></label>
+    <div class="btns"><a class="btn gold full" id="mGo" href="#" target="_blank" rel="noopener">Ouvrir dans Mail</a></div>
+    <div class="btns"><button class="btn sec" id="cpB">Copier le message</button></div>
+    <p class="note">Si Mail ne s'ouvre pas depuis cette page, copiez les adresses et le message puis collez-les dans votre messagerie.</p>`,p=>{
+    const u=()=>{$("#mGo",p).href=single?mailHref(emails[0],$("#mS",p).value,$("#mB",p).value):mailHref(cfg().emailContact||"",$("#mS",p).value,$("#mB",p).value,emails.join(","));};
+    u();$("#mS",p).oninput=u;$("#mB",p).oninput=u;
+    const ce=$("#cpE",p);if(ce)ce.onclick=()=>copy(emails.join(", "));
+    $("#cpB",p).onclick=()=>copy($("#mB",p).value);
+    $("#mGo",p).addEventListener("click",async()=>{if(relanceIds&&relanceIds.length&&S.isAdmin){try{await chk(S.sb.from("membres").update({derniereRelance:today()}).in("id",relanceIds));reload();}catch(e){}}});
+  });
+}
+
+/* ----- Prélèvements SEPA ----- */
+VIEWS.prelevements={
+  shell:()=>`<a class="back" href="#plus">‹ Plus</a>${intro("La banque","Prélèvements SEPA","Préparer le fichier de remise à déposer sur l'espace de votre banque.")}<div id="sp"></div>`,
+  update(){
+    const c=cfg();
+    const manque=[];if(!c.ics)manque.push("l'identifiant créancier SEPA (ICS)");if(!ibanOk(c.ibanAsso))manque.push("l'IBAN de l'association");
+    const pr=membresTri().filter(m=>m.actif!==false&&prelevActif(m));
+    const okM=m=>{const p=m.prelevement||{};return ibanOk(p.iban)&&p.rum&&p.dateSignature&&(p.titulaire||m.nom);};
+    if(!S._selP)S._selP=new Set(pr.filter(m=>okM(m)&&!aJour(m)).map(m=>m.id));
+    const dateEch=S._dateEch||c.prochainPrelevement||"";
+    const sel=pr.filter(m=>S._selP.has(m.id)&&okM(m));
+    const tot=sel.reduce((s,m)=>s+montantDu(m),0);
+    $("#sp").innerHTML=`
+      ${manque.length?`<div class="banner">Complétez dans les <a href="#reglages">Réglages</a> : ${manque.join(" et ")}.</div>`:""}
+      <label class="f"><span>Date d'échéance (jour du débit)</span><input type="date" id="dEch" value="${esc(dateEch)}"></label>
+      ${pr.length?`<div class="list">${pr.map(m=>{const ok=okM(m),p=m.prelevement||{};return`<label class="row" style="cursor:pointer"><input type="checkbox" data-s="${esc(m.id)}" ${S._selP.has(m.id)&&ok?"checked":""} ${ok?"":"disabled"}><div class="main"><b>${esc(fullName(m))}</b><small>${ok?esc(ibanFmt(p.iban).slice(0,9))+"… · "+esc(p.sequence==="RCUR"?"récurrent":"1er prélèvement"):'<span class="bad-t">mandat incomplet (IBAN, RUM ou date de signature)</span>'}</small></div><div class="right">${eur(montantDu(m))}<br>${aJour(m)?'<span class="chip ok">Déjà réglé</span>':""}</div></label>`;}).join("")}</div>`
+      :`<div class="empty">Aucun adhérent n'a de mandat de prélèvement.<br>Activez le prélèvement dans la fiche d'un adhérent.</div>`}
+      ${pr.length?`<div class="card"><b>${sel.length}</b> prélèvement${sel.length>1?"s":""} · <b>${eur(tot)}</b></div>
+      <label class="check"><input type="checkbox" id="recP" checked> Enregistrer ces cotisations comme réglées par prélèvement</label>
+      <button class="btn gold full" id="genP" ${sel.length&&!manque.length?"":"disabled"}>Générer le fichier SEPA</button>
+      <p class="note">Le fichier (format pain.008, compressé en .zip) se dépose sur l'espace « remises de prélèvements » de votre banque au moins 2 jours ouvrés avant l'échéance. Pensez à envoyer la pré-notification depuis <a class="lnk" href="#relances">Relances</a>.</p>`:""}`;
+    $("#dEch").onchange=e=>{S._dateEch=e.target.value;};
+    $$("[data-s]").forEach(cb=>cb.onchange=()=>{cb.checked?S._selP.add(cb.dataset.s):S._selP.delete(cb.dataset.s);this.update();});
+    const g=$("#genP");if(g)g.onclick=()=>genSepa(sel,$("#recP").checked);
+  }
+};
+function sepaTxt(s,max){return noAcc(s).replace(/[^A-Za-z0-9\/\-?:().,'+ ]/g," ").replace(/\s+/g," ").trim().slice(0,max||70);}
+async function genSepa(sel,record){
+  const c=cfg(),dateEch=S._dateEch||c.prochainPrelevement;
+  if(!dateEch)return toast("Indiquez la date d'échéance");
+  if(dateEch<=today())return toast("La date d'échéance doit être dans le futur");
+  if(!window.JSZip)return toast("Module de compression non chargé : vérifiez la connexion et réessayez");
+  const now=new Date(),stamp=now.toISOString().replace(/[-:T]/g,"").slice(0,14);
+  const msgId=sepaTxt(`${c.sigle||"AMGP"}-${stamp}`,35);
+  const groups={FRST:[],RCUR:[]};sel.forEach(m=>groups[(m.prelevement.sequence==="RCUR")?"RCUR":"FRST"].push(m));
+  const ctrl=L=>L.reduce((s,m)=>s+montantDu(m),0).toFixed(2);
+  const bicA=String(c.bicAsso||"").replace(/\s/g,"").toUpperCase();
+  const pmt=(seq,L,i)=>`<PmtInf><PmtInfId>${msgId}-${i}</PmtInfId><PmtMtd>DD</PmtMtd><BtchBookg>true</BtchBookg><NbOfTxs>${L.length}</NbOfTxs><CtrlSum>${ctrl(L)}</CtrlSum><PmtTpInf><SvcLvl><Cd>SEPA</Cd></SvcLvl><LclInstrm><Cd>CORE</Cd></LclInstrm><SeqTp>${seq}</SeqTp></PmtTpInf><ReqdColltnDt>${dateEch}</ReqdColltnDt><Cdtr><Nm>${sepaTxt(c.asso)}</Nm></Cdtr><CdtrAcct><Id><IBAN>${ibanClean(c.ibanAsso)}</IBAN></Id></CdtrAcct><CdtrAgt><FinInstnId>${bicA?`<BIC>${bicA}</BIC>`:"<Othr><Id>NOTPROVIDED</Id></Othr>"}</FinInstnId></CdtrAgt><ChrgBr>SLEV</ChrgBr><CdtrSchmeId><Id><PrvtId><Othr><Id>${sepaTxt(c.ics,35).replace(/ /g,"")}</Id><SchmeNm><Prtry>SEPA</Prtry></SchmeNm></Othr></PrvtId></Id></CdtrSchmeId>`
+    +L.map((m,j)=>{const p=m.prelevement,bic=String(p.bic||"").replace(/\s/g,"").toUpperCase();
+      return`<DrctDbtTxInf><PmtId><EndToEndId>${sepaTxt(`${msgId}-${i}-${j+1}`,35)}</EndToEndId></PmtId><InstdAmt Ccy="EUR">${montantDu(m).toFixed(2)}</InstdAmt><DrctDbtTx><MndtRltdInf><MndtId>${sepaTxt(p.rum,35)}</MndtId><DtOfSgntr>${p.dateSignature}</DtOfSgntr></MndtRltdInf></DrctDbtTx><DbtrAgt><FinInstnId>${bic?`<BIC>${bic}</BIC>`:"<Othr><Id>NOTPROVIDED</Id></Othr>"}</FinInstnId></DbtrAgt><Dbtr><Nm>${sepaTxt(p.titulaire||fullName(m))}</Nm></Dbtr><DbtrAcct><Id><IBAN>${ibanClean(p.iban)}</IBAN></Id></DbtrAcct><RmtInf><Ustrd>${sepaTxt(`Cotisation ${c.saison} ${c.sigle||"AMGP"}`,140)}</Ustrd></RmtInf></DrctDbtTxInf>`;}).join("")+`</PmtInf>`;
+  let i=0;const blocks=Object.entries(groups).filter(([,L])=>L.length).map(([seq,L])=>pmt(seq,L,++i)).join("");
+  const xml=`<?xml version="1.0" encoding="UTF-8"?>\n<Document xmlns="urn:iso:std:iso:20022:tech:xsd:pain.008.001.02" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><CstmrDrctDbtInitn><GrpHdr><MsgId>${msgId}</MsgId><CreDtTm>${now.toISOString().slice(0,19)}</CreDtTm><NbOfTxs>${sel.length}</NbOfTxs><CtrlSum>${ctrl(sel)}</CtrlSum><InitgPty><Nm>${sepaTxt(c.asso)}</Nm></InitgPty></GrpHdr>${blocks}</CstmrDrctDbtInitn></Document>`;
+  const z=new JSZip();z.file(`prelevement-${dateEch}.xml`,xml);
+  const blob=await z.generateAsync({type:"blob"});
+  if(!await saveFile(`prelevement-${dateEch}.zip`,blob))return;
+  if(record){
+    for(const m of sel){
+      const amt=montantDu(m);
+      await put("paiements/"+uid(),{membreId:m.id,nomAffiche:fullName(m),saison:String(c.saison),montant:amt,cotis:Math.min(amt,num(c.montant)),mode:"prelevement",date:dateEch,ref:msgId,note:"Remise SEPA",compta:"",cree:new Date().toISOString()});
+      if(m.prelevement.sequence!=="RCUR")await upd("membres/"+m.id,{prelevement:{...m.prelevement,sequence:"RCUR"}});
+    }
+    S._selP=null;toast("Fichier généré et cotisations enregistrées");
+  }else toast("Fichier généré");
+}
+
+/* ----- Compta ----- */
+VIEWS.compta={
+  shell:()=>`<a class="back" href="#plus">‹ Plus</a>${intro("Des comptes clairs","Bascule en compta","Exporter les encaissements en écritures pour votre logiciel comptable.")}
+    <div class="two"><select id="cs" aria-label="Saison"></select><select id="cf" aria-label="Filtre"><option value="new">Non basculés</option><option value="all">Tous</option></select></div><div id="cc"></div>`,
+  bind(){$("#cs").onchange=e=>{S._cs=e.target.value;this.update();};$("#cf").onchange=e=>{S._cf=e.target.value;this.update();};},
+  update(){
+    const c=cfg(),ss=seasons();if(!S._cs||!ss.includes(S._cs))S._cs=String(c.saison);
+    $("#cs").innerHTML=ss.map(s=>`<option ${s===S._cs?"selected":""}>${esc(s)}</option>`).join("");$("#cf").value=S._cf||"new";
+    const L=S.paiements.filter(p=>String(p.saison)===S._cs&&((S._cf||"new")==="all"||!p.compta)).sort((a,b)=>(a.date||"").localeCompare(b.date||""));
+    const by=Object.keys(MODES).map(k=>[k,L.filter(p=>p.mode===k)]).filter(x=>x[1].length);
+    const T=L.reduce((t,p)=>{const v=ventil(p);t.tot+=v.total;t.cot+=v.cotis;t.sur+=v.surplus;t.fr+=fraisDe(p);return t;},{tot:0,cot:0,sur:0,fr:0});
+    $("#cc").innerHTML=L.length?`
+      <div class="card"><div class="ventil">
+        <div><span>Cotisations (${esc(c.comptes.cotis)})</span><b>${eur(T.cot)}</b></div>
+        <div><span>${esc(c.libSurplus)} (${esc(c.comptes.surplus)})</span><b>${eur(T.sur)}</b></div>
+        ${T.fr>0?`<div><span>Frais SumUp estimés (${esc(c.comptes.frais)})</span><b>− ${eur(T.fr)}</b></div>`:""}
+        <div><span><b>Total encaissé</b></span><b>${eur(T.tot)}</b></div></div></div>
+      <div class="list">${by.map(([k,P])=>`<div class="row" style="cursor:default"><div class="main"><b>${MODES[k]}</b><small>${P.length} encaissement${P.length>1?"s":""} · compte ${esc(c.comptes[k])}</small></div><div class="right"><b>${eur(P.reduce((s,p)=>s+num(p.montant),0))}</b></div></div>`).join("")}</div>
+      <button class="btn gold full" id="expC">Exporter le journal (CSV)</button>
+      <p class="note">Par encaissement : débit du compte de trésorerie, crédit de la cotisation (jusqu'à ${eurTxt(c.montant)}) et du compte « ${esc(c.libSurplus)} » pour le surplus. Pour SumUp, la commission estimée (${esc(String(c.fraisSumup).replace(".",","))} %) passe en frais bancaires : vérifiez-la sur vos relevés. Journal « CA » pour la caisse, « BQ » pour le reste.</p>`
+      :`<div class="empty">Rien à basculer pour cette saison.</div>`;
+    const b=$("#expC");if(b)b.onclick=()=>exportCompta(L);
+  }
+};
+function csvCell(v){v=String(v??"");if(/^[=+@\-]/.test(v)&&!/^-?\d/.test(v))v="'"+v;return /[;"\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;}
+async function exportCompta(L){
+  const c=cfg(),dec=n=>n?r2(n).toFixed(2).replace(".",","):"";
+  const rows=[["Journal","Date","Compte","Piece","Libelle","Debit","Credit","Mode","Reference"]];
+  L.forEach((p,i)=>{
+    const m=membre(p.membreId),nom=m?fullName(m):p.nomAffiche||"",v=ventil(p),fr=fraisDe(p);
+    const j=p.mode==="especes"?"CA":"BQ",piece=p.recuNum||`COT-${(p.date||"").replace(/-/g,"")}-${String(i+1).padStart(3,"0")}`;
+    const base=[j,fd(p.date)],tail=[MODES[p.mode]||p.mode,p.ref||""];
+    rows.push([...base,c.comptes[p.mode]||c.comptes.virement,piece,`Cotisation ${p.saison} ${nom}`,dec(v.total-fr),"",...tail]);
+    if(fr>0)rows.push([...base,c.comptes.frais,piece,`Commission SumUp ${nom}`,dec(fr),"",...tail]);
+    rows.push([...base,c.comptes.cotis,piece,`Cotisation ${p.saison} ${nom}`,"",dec(v.cotis),...tail]);
+    if(v.surplus>0)rows.push([...base,c.comptes.surplus,piece,`${c.libSurplus} ${nom}`,"",dec(v.surplus),...tail]);
+  });
+  const csv="﻿"+rows.map(r=>r.map(csvCell).join(";")).join("\r\n");
+  if(!await saveFile(`compta-cotisations-${S._cs}-${today()}.csv`,csv))return;
+  const todo=L.filter(p=>!p.compta);
+  if(todo.length&&await confirmBox(`Marquer ces ${todo.length} encaissement${todo.length>1?"s":""} comme basculés en compta ? Ils ne pourront plus être supprimés et n'apparaîtront plus dans les prochains exports « non basculés ».`,"Marquer",false)){
+    try{await chk(S.sb.from("paiements").update({compta:today()}).in("id",todo.map(p=>p.id)));toast("Bascule enregistrée");reload();}catch(e){toast("Marquage impossible : "+errMsg(e));}
+  }
+}
+async function exportMembres(){
+  const rows=[["Nom","Prénom","Catégorie","Service","Instrument","Email","Téléphone","Statut "+cfg().saison,"Prélèvement","Actif"]];
+  membresTri().forEach(m=>rows.push([m.nom,m.prenom,m.categorie||"",m.service||"",m.instrument||"",m.email||"",m.tel||"",aJour(m)?"À jour":(isPot(m)?"Potentiel":"À régler"),prelevActif(m)?"Oui":"Non",m.actif===false?"Non":"Oui"]));
+  await saveFile(`adherents-${today()}.csv`,"﻿"+rows.map(r=>r.map(csvCell).join(";")).join("\r\n"));
+}
+
+/* ----- Sauvegarde ----- */
+VIEWS.sauvegarde={
+  shell:()=>`<a class="back" href="#plus">‹ Plus</a>${intro("Vos données","Sauvegarde","Une copie complète à garder en lieu sûr, par exemple une fois par mois.")}
+    <div class="card"><b>Exporter</b><p class="note">Adhérents (IBAN compris), encaissements, événements, inscriptions et réglages dans un fichier JSON. Conservez-le dans un endroit protégé : il contient des données bancaires.</p><button class="btn gold full" id="bk">Télécharger la sauvegarde</button></div>
+    <div class="card"><b>Restaurer</b><p class="note">Réécrit les fiches contenues dans le fichier. Les fiches créées depuis la sauvegarde sont conservées. Les RIB joints (photos) ne sont pas dans le fichier.</p>
+    <label class="drop" id="rsDrop"><input type="file" id="rsFile" accept="application/json,.json" hidden>Choisir ou déposer un fichier de sauvegarde</label></div>`,
+  bind(){
+    $("#bk").onclick=async()=>{const strip=a=>a.map(({...d})=>d);
+      const data={app:"amgp-adhesions",version:3,date:new Date().toISOString(),config:S.config||{},membres:strip(S.membres),paiements:strip(S.paiementsAll),evenements:strip(S.evenements),inscriptions:strip(S.inscriptions)};
+      await saveFile(`amgp-sauvegarde-${today()}.json`,JSON.stringify(data,null,1));};
+    dropZone($("#rsDrop"),$("#rsFile"),async f=>{
+      let d;try{d=JSON.parse(await f.text());}catch(e){return toast("Fichier illisible");}
+      if(d.app!=="amgp-adhesions"||!Array.isArray(d.membres)||!Array.isArray(d.paiements))return toast("Ce fichier n'est pas une sauvegarde de l'appli");
+      const n=d.membres.length+d.paiements.length+(d.evenements||[]).length+(d.inscriptions||[]).length;
+      if(!await confirmBox(`Restaurer ${d.membres.length} adhérents, ${d.paiements.length} encaissements et ${(d.evenements||[]).length} événements du ${fd(String(d.date).slice(0,10))} ? Les fiches du même identifiant seront remplacées.`,"Restaurer"))return;
+      let k=0,ko=0;
+      try{
+        if(d.config&&Object.keys(d.config).length)await chk(S.sb.from("config").upsert({id:1,data:d.config}));
+        const M=d.membres.filter(x=>x&&x.id&&x.nom&&x.prenom);
+        for(let i=0;i<M.length;i+=200){await chk(S.sb.from("membres").upsert(M.slice(i,i+200).map(x=>clean("membres",x))));k+=Math.min(200,M.length-i);}
+        const MD=M.filter(x=>x.prelevement&&(x.prelevement.actif||x.prelevement.iban)).map(x=>clean("mandats",{...x.prelevement,membreId:x.id}));
+        if(MD.length)await chk(S.sb.from("mandats").upsert(MD));
+        const P=d.paiements.filter(x=>x&&x.id&&+x.saison>=PREMIERE_SAISON).map(x=>clean("paiements",{...x,encaissePar:x.encaissePar||S.uid,annule:!!x.annule,signalementTraite:!!x.signalementTraite}));
+        for(let i=0;i<P.length;i+=200){await chk(S.sb.from("paiements").upsert(P.slice(i,i+200)));k+=Math.min(200,P.length-i);}
+        const E=(d.evenements||[]).filter(x=>x&&x.id&&x.titre&&x.date).map(x=>clean("evenements",x));
+        if(E.length){await chk(S.sb.from("evenements").upsert(E));k+=E.length;}
+        const I=(d.inscriptions||[]).filter(x=>x&&x.evenementId&&x.membreId).map(x=>({evenementId:x.evenementId,membreId:x.membreId}));
+        if(I.length)await chk(S.sb.from("inscriptions").upsert(I));
+      }catch(e){ko=1;toast("Restauration interrompue : "+errMsg(e));}
+      reload();if(!ko)toast(`Restauration terminée : ${k} fiches`);
+    });
+  }
+};
+
+/* ----- Import HelloAsso / SumUp ----- */
+VIEWS.import={
+  shell:()=>`<a class="back" href="#plus">‹ Plus</a>${intro("Les paiements en ligne","Importer HelloAsso / SumUp","Déposez l'export : les paiements sont rattachés aux fiches.")}
+    <div class="seg" id="src"><button data-v="helloasso" class="on">HelloAsso</button><button data-v="sumup">SumUp</button><button data-v="virement">Autre (virement)</button></div>
+    <label class="drop" id="imDrop" style="margin-top:12px"><input type="file" id="imFile" accept=".csv,.xlsx,.xls,text/csv,text/plain,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden>Glissez l'export (Excel ou CSV) ici ou touchez pour le choisir</label>
+    <p class="note">HelloAsso : Administration › Paiements (ou la campagne d'adhésion) › Exporter. SumUp : Ventes › Mes rapports › Rapport des transactions. Nom, prénom, e-mail, montant, date, référence, campagne et statut sont reconnus. Pour SumUp, le nom peut aussi être lu dans la description de la vente.</p>
+    <div id="imPrev"></div>`,
+  bind(){
+    S._src="helloasso";S._imp=null;
+    $$("#src button").forEach(b=>b.onclick=()=>{S._src=b.dataset.v;$$("#src button").forEach(x=>x.classList.toggle("on",x===b));if(S._imp)renderImport();});
+    dropZone($("#imDrop"),$("#imFile"),async f=>{try{S._imp=analyseRows(await readTable(f));renderImport();}catch(e){toast("Fichier illisible : "+e.message);}});
+  },
+  update(){if(S._imp)renderImport();}
+};
+function dropZone(el,input,cb){
+  input.onchange=()=>{if(input.files[0])cb(input.files[0]);input.value="";};
+  el.addEventListener("dragover",e=>{e.preventDefault();el.classList.add("over");});
+  el.addEventListener("dragleave",()=>el.classList.remove("over"));
+  el.addEventListener("drop",e=>{e.preventDefault();el.classList.remove("over");const f=e.dataTransfer.files[0];if(f)cb(f);});
+}
+async function readTable(f){
+  if(/\.xlsx?$/i.test(f.name||"")){
+    if(!window.XLSX)throw new Error("module Excel non chargé, vérifiez la connexion");
+    const wb=XLSX.read(await f.arrayBuffer(),{type:"array"});
+    const ws=wb.Sheets[wb.SheetNames[0]];
+    return XLSX.utils.sheet_to_json(ws,{header:1,raw:true,defval:""}).map(r=>r.map(v=>v instanceof Date?v.toISOString().slice(0,10):String(v??"")));
+  }
+  return parseCSV(await f.text());
+}
+function parseCSV(t){
+  t=t.replace(/^﻿/,"");const first=t.split(/\r?\n/)[0];
+  const cnt=ch=>(first.split(ch).length-1);const sep=cnt("\t")>cnt(";")&&cnt("\t")>cnt(",")?"\t":(cnt(";")>=cnt(",")?";":",");
+  const rows=[];let row=[],cell="",q=false;
+  for(let i=0;i<t.length;i++){const ch=t[i];
+    if(q){if(ch==='"'){if(t[i+1]==='"'){cell+='"';i++;}else q=false;}else cell+=ch;}
+    else if(ch==='"')q=true;else if(ch===sep){row.push(cell);cell="";}
+    else if(ch==="\n"||ch==="\r"){if(ch==="\r"&&t[i+1]==="\n")i++;row.push(cell);rows.push(row);row=[];cell="";}
+    else cell+=ch;}
+  if(cell||row.length){row.push(cell);rows.push(row);}
+  return rows;
+}
+function parseDate(s){s=String(s||"").trim();
+  if(/^\d{5}(\.\d+)?$/.test(s)){const d=new Date(Math.round((+s-25569)*86400000));return d.toISOString().slice(0,10);}
+  let m=s.match(/(\d{4})-(\d{2})-(\d{2})/);if(m)return`${m[1]}-${m[2]}-${m[3]}`;
+  m=s.match(/(\d{1,2})[\/.](\d{1,2})[\/.](\d{2,4})/);if(m){const y=m[3].length===2?"20"+m[3]:m[3];return`${y}-${m[2].padStart(2,"0")}-${m[1].padStart(2,"0")}`;}return"";}
+function analyseRows(rows){
+  rows=rows.filter(r=>r.some(c=>String(c).trim()));
+  if(rows.length<2)throw new Error("aucune ligne de données");
+  const H=rows[0].map(h=>noAcc(h).toLowerCase().trim());
+  const find=(pats,not)=>{for(const p of pats){const i=H.findIndex(h=>p.test(h)&&!(not&&not.test(h)));if(i>=0)return i;}return -1;};
+  const col={
+    prenom:find([/^prenom (de l'?)?(adherent|participant|beneficiaire)/,/^prenom$/,/^prenom/,/prenom/,/first ?name/]),
+    nom:find([/^nom (de l'?)?(adherent|participant|beneficiaire)/,/^nom$/,/^nom de famille/,/^nom payeur/,/last ?name/,/^nom/],/prenom|organisme|formulaire|tarif|campagne/),
+    email:find([/^e-?mail (de l'?)?(adherent|participant|beneficiaire)/,/^e-?mail$/,/e-?mail/,/courriel/]),
+    montant:find([/^montant total/,/^montant$/,/montant (du )?tarif/,/montant/,/^total/,/amount/,/prix/],/code promo|options|rembours|frais|fee|pourboire|tip|net/),
+    date:find([/date du paiement/,/^date$/,/date (de la )?(commande|transaction)/,/date/],/naissance|versement|virement|payout/),
+    ref:find([/reference (du )?paiement/,/reference/,/numero (de )?commande/,/code (de )?transaction/,/transaction id/,/^id$/,/numero/]),
+    campagne:find([/^campagne$/,/^formulaire/,/campagne/]),
+    typeCamp:find([/type de campagne/,/type de formulaire/]),
+    statut:find([/^statut/,/^status/,/etat/]),
+    desc:find([/description/,/libelle/,/produit/,/^note/,/commentaire/])
+  };
+  if(col.montant<0)throw new Error("colonne « montant » introuvable");
+  const g=(r,k)=>col[k]>=0?String(r[col[k]]??"").trim():"";
+  const lignes=rows.slice(1).map(r=>{
+    const l={prenom:g(r,"prenom"),nom:g(r,"nom"),email:g(r,"email").toLowerCase(),montant:r2(num(g(r,"montant"))),date:parseDate(g(r,"date"))||today(),ref:g(r,"ref"),desc:g(r,"desc"),campagne:g(r,"campagne"),typeCamp:g(r,"typeCamp"),statut:g(r,"statut")};
+    if(!l.prenom&&l.nom&&/\s/.test(l.nom)&&col.prenom<0){const p=l.nom.split(/\s+/);l.prenom=p.shift();l.nom=p.join(" ");}
+    const yc=(l.campagne.match(/20\d{2}/)||[])[0];l.saison=yc||l.date.slice(0,4);
+    l.ancien=+l.saison<PREMIERE_SAISON;
+    l.statutOk=!/rembours|annul|refus|attente|echou|echec|fail|refund|cancel|pending|declin/i.test(noAcc(l.statut));
+    let mm=(l.email&&S.membres.find(m=>(m.email||"").toLowerCase()===l.email))||(l.nom&&S.membres.find(m=>norm(m.nom)===norm(l.nom)&&norm(m.prenom)===norm(l.prenom)));
+    if(!mm&&l.desc){const d=norm(l.desc);mm=S.membres.find(m=>m.nom&&m.prenom&&d.includes(norm(m.nom))&&d.includes(norm(m.prenom)));}
+    l.choix=mm?mm.id:(l.nom?"__new":"");
+    return l;
+  }).filter(l=>l.montant>0);
+  const camps={};lignes.forEach(l=>{if(l.campagne){camps[l.campagne]=camps[l.campagne]||{n:0,on:false};camps[l.campagne].n++;if(/cotis|adh/i.test(noAcc(l.campagne))||/adhesion/i.test(noAcc(l.typeCamp)))camps[l.campagne].on=true;}});
+  if(Object.keys(camps).length&&!Object.values(camps).some(c=>c.on))Object.values(camps).forEach(c=>c.on=true);
+  return{lignes,col,camps};
+}
+function renderImport(){
+  const I=S._imp,mode=S._src,M=membresTri();
+  const vis=I.lignes.filter(l=>l.statutOk&&!l.ancien&&(!l.campagne||(I.camps[l.campagne]&&I.camps[l.campagne].on)));
+  vis.forEach(l=>{if(l._init)return;l._init=true;l.doublon=!!(l.ref&&S.paiements.some(p=>p.ref===l.ref&&p.mode===mode));if(l.doublon)l.choix="";});
+  const exclStatut=I.lignes.filter(l=>!l.statutOk).length,exclAnc=I.lignes.filter(l=>l.ancien).length;
+  const opts=l=>`<option value="">— ignorer —</option>${l.nom?`<option value="__new" ${l.choix==="__new"?"selected":""}>+ créer ${esc(l.prenom+" "+l.nom)}</option>`:""}${M.map(m=>`<option value="${esc(m.id)}" ${l.choix===m.id?"selected":""}>${esc(fullName(m))}${isPot(m)?" (potentiel)":""}</option>`).join("")}`;
+  const campList=Object.entries(I.camps);
+  $("#imPrev").innerHTML=`
+    ${campList.length?`<h3>Campagnes à importer</h3><div class="card">${campList.map(([k,c])=>`<label class="check"><input type="checkbox" data-camp="${esc(k)}" ${c.on?"checked":""}> ${esc(k)} <span class="note">(${c.n})</span></label>`).join("")}</div>`:""}
+    ${exclAnc?`<p class="note">${exclAnc} paiement${exclAnc>1?"s":""} antérieur${exclAnc>1?"s":""} à ${PREMIERE_SAISON} ignoré${exclAnc>1?"s":""} : l'appli ne gère qu'à partir de ${PREMIERE_SAISON}.</p>`:""}
+    ${exclStatut?`<p class="note">${exclStatut} paiement${exclStatut>1?"s":""} non validé${exclStatut>1?"s":""} (remboursé, annulé, en attente…) écarté${exclStatut>1?"s":""}.</p>`:""}
+    <h3>${vis.length} paiement${vis.length>1?"s":""}</h3>
+    ${vis.length?`<div class="card" style="overflow-x:auto"><table class="prev"><tr><th>Paiement</th><th>Adhérent</th></tr>
+    ${vis.map(l=>{const i=I.lignes.indexOf(l);return`<tr><td><b>${eur(l.montant)}</b> · ${fd(l.date)} · <span class="chip" style="margin:0">${esc(l.saison)}</span><br><small>${esc([l.prenom,l.nom].filter(Boolean).join(" ")||l.email||l.desc||"—")}${l.campagne?" · "+esc(l.campagne):""}</small>${l.doublon?'<br><span class="chip warn" style="margin:0">Déjà importé</span>':""}</td><td><select data-i="${i}">${opts(l)}</select></td></tr>`;}).join("")}</table></div>
+    <p class="note">La saison de chaque paiement vient de l'année indiquée dans le nom de la campagne, sinon de la date du paiement.</p>
+    <button class="btn gold full" id="imGo">Importer comme ${MODES[mode]}</button>`:`<div class="empty">Aucun paiement à importer avec ces choix.</div>`}`;
+  $$("[data-camp]").forEach(cb=>cb.onchange=()=>{I.camps[cb.dataset.camp].on=cb.checked;renderImport();});
+  $$("#imPrev select[data-i]").forEach(s=>s.onchange=()=>{I.lignes[+s.dataset.i].choix=s.value;});
+  const go=$("#imGo");if(go)go.onclick=async()=>{
+    const L=vis.filter(l=>l.choix);if(!L.length)return toast("Aucune ligne sélectionnée");
+    if(!await confirmBox(`Importer ${L.length} paiement${L.length>1?"s":""} ${MODES[mode]} ?`,"Importer",false))return;
+    let n=0;const cotisDef=num(cfg().montant);
+    for(const l of L){
+      let mid=l.choix;
+      if(mid==="__new"){mid=uid();if(!await put("membres/"+mid,{nom:l.nom,prenom:l.prenom,email:l.email,tel:"",instrument:"",categorie:"",actif:true,potentiel:false,cree:new Date().toISOString()}))break;}
+      const m=membre(mid);
+      if(await put("paiements/"+uid(),{membreId:mid,nomAffiche:m?fullName(m):`${l.prenom} ${l.nom}`.trim(),saison:l.saison,montant:l.montant,cotis:Math.min(l.montant,m?montantDu(m):cotisDef),mode,date:l.date,ref:l.ref,note:"Import "+MODES[mode]+(l.campagne?" – "+l.campagne:""),compta:"",cree:new Date().toISOString()}))n++;
+      if(m&&m.potentiel===true)await upd("membres/"+mid,{potentiel:false});
+    }
+    toast(`${n} paiement${n>1?"s":""} importé${n>1?"s":""}`);S._imp=null;location.hash="#paiements";
+  };
+}
+
+/* ----- Réglages ----- */
+VIEWS.reglages={
+  shell:()=>{const c=cfg();const F=(k,l,t="text",ph="")=>`<label class="f"><span>${l}</span><input id="c_${k}" type="${t}" value="${esc(c[k])}" placeholder="${esc(ph)}"></label>`;
+    return`<a class="back" href="#plus">‹ Plus</a>${intro("Votre espace","Réglages","Les fondations de l'appli.")}<div id="ban"></div>
+    <h3>Association</h3><div class="card">${F("asso","Nom")}${F("sigle","Sigle (objet des mails, références)")}<label class="f"><span>Adresse (figure sur les reçus)</span><textarea id="c_adresse" style="min-height:70px">${esc(c.adresse)}</textarea></label>${F("tresorier","Signataire des reçus (trésorier)")}${F("emailContact","Mail du bureau","email")}</div>
+    <h3>Cotisation</h3><div class="card"><div class="two"><label class="f"><span>Saison (vide = année en cours)</span><input id="c_saison" value="${esc((S.config&&S.config.saison)||"")}" placeholder="${defaultSaison()}" inputmode="numeric"></label>${F("montant","Cotisation (€)","number")}</div>
+      ${F("libSurplus","Nom du surplus versé au-delà de la cotisation")}<p class="note">Un versement de 15 € donne 10 € de cotisation et 5 € de surplus. En comptabilité associative, un tel versement volontaire est souvent un don (compte 754) : à confirmer avec le trésorier.</p></div>
+    <h3>Prélèvements SEPA</h3><div class="card">${F("ics","Identifiant créancier SEPA (ICS)","text","FR12ZZZ123456")}${F("ibanAsso","IBAN de l'association")}${F("bicAsso","BIC de l'association")}${F("prochainPrelevement","Prochain prélèvement","date")}<p class="note">L'ICS se demande à votre banque. Sans lui la banque refuse les prélèvements.</p></div>
+    <h3>SumUp</h3><div class="card">${F("fraisSumup","Commission SumUp (%)","number")}<p class="note">Sert à estimer les frais bancaires dans l'export compta.</p></div>
+    <h3>Comptes comptables</h3><div class="card"><div class="two">${[["cotis","Cotisations (crédit)"],["surplus","Surplus (crédit)"],["frais","Frais bancaires"],...Object.entries(MODES)].map(([k,l])=>`<label class="f"><span>${l}</span><input data-cpt="${k}" value="${esc(c.comptes[k])}"></label>`).join("")}</div></div>
+    <h3>Modèles de mails</h3><div class="card"><p class="note">Variables : {prenom} {nom} {saison} {montant} {date} {rum} {asso}</p><label class="f"><span>Relance de cotisation</span><textarea id="c_msgRelance" style="min-height:180px">${esc(c.msgRelance)}</textarea></label><label class="f"><span>Pré-notification de prélèvement</span><textarea id="c_msgPrenotif" style="min-height:180px">${esc(c.msgPrenotif)}</textarea></label></div>
+    <button class="btn gold full" id="cSave">Enregistrer les réglages</button>`;},
+  bind(){
+    S._regDirty=false;$$("#view input,#view textarea").forEach(i=>i.addEventListener("input",()=>{S._regDirty=true;}));
+    $("#cSave").onclick=async()=>{
+      const v=k=>$("#c_"+k).value.trim();
+      const d={};["asso","sigle","adresse","tresorier","emailContact","saison","ics","bicAsso","prochainPrelevement","msgRelance","msgPrenotif","libSurplus"].forEach(k=>d[k]=v(k));
+      d.montant=num(v("montant"));d.fraisSumup=num(v("fraisSumup"));d.ibanAsso=ibanClean(v("ibanAsso"));d.bicAsso=d.bicAsso.toUpperCase().replace(/\s/g,"");
+      if(d.montant<=0)return toast("Montant de cotisation invalide");
+      if(d.ibanAsso&&!ibanOk(d.ibanAsso))return toast("L'IBAN de l'association n'est pas valide");
+      if(!bicOk(d.bicAsso))return toast("Le BIC n'est pas valide");
+      if(d.saison&&!/^\d{4}$/.test(d.saison))return toast("Saison : une année, par exemple 2026");
+      if(d.saison&&+d.saison<PREMIERE_SAISON)return toast(`Saison ${PREMIERE_SAISON} minimum`);
+      d.comptes={};$$("[data-cpt]").forEach(i=>d.comptes[i.dataset.cpt]=i.value.trim());
+      if(await put("config/general",d)){S._regDirty=false;toast("Réglages enregistrés");}
+    };
+  },
+  update(){const b=$("#ban");if(b)b.innerHTML=dataBanner();}
+};
+
+/* ================= RIB (stockage privé) ================= */
+async function compresse(file){
+  if(!/^image\//.test(file.type||""))return file;
+  const url=URL.createObjectURL(file);
+  try{const img=await new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=()=>rej(new Error("image illisible"));i.src=url;});
+    const k=Math.min(1,1600/Math.max(img.naturalWidth,img.naturalHeight)),cv=document.createElement("canvas");cv.width=Math.round(img.naturalWidth*k);cv.height=Math.round(img.naturalHeight*k);
+    cv.getContext("2d").drawImage(img,0,0,cv.width,cv.height);return await new Promise(r=>cv.toBlob(r,"image/jpeg",.75));}
+  finally{URL.revokeObjectURL(url);}
+}
+async function envoyerRib(membreId,file){
+  const blob=await compresse(file),ext=/pdf/i.test(file.type)||/\.pdf$/i.test(file.name||"")?"pdf":"jpg";
+  const path=`${membreId}/${uid()}.${ext}`;
+  const {error}=await S.sb.storage.from("rib").upload(path,blob,{contentType:ext==="pdf"?"application/pdf":"image/jpeg"});
+  if(error)throw error;return path;
+}
+async function voirRib(path){const {data,error}=await S.sb.storage.from("rib").createSignedUrl(path,300);if(error)return toast("RIB introuvable : "+errMsg(error));window.open(data.signedUrl,"_blank");}
+
+/* ================= FEUILLES ================= */
+/* ----- Fiche adhérent ----- */
+function memberSheet(id){
+  const m0=id?membre(id):null;if(id&&!m0)return;
+  if(id&&!S.isAdmin)return ficheCaissier(m0);
+  const newId=id||uid();
+  const m=m0?JSON.parse(JSON.stringify(m0)):{nom:"",prenom:"",instrument:"",email:"",tel:"",categorie:"",actif:true,potentiel:false,prelevement:{actif:false}};
+  m.prelevement=m.prelevement||{actif:false};const P=m.prelevement;
+  if(!P.rum)P.rum=`${cfg().sigle||"AMGP"}-${new Date().getFullYear()}-${uid().slice(0,6).toUpperCase()}`;
+  const hist=id?S.paiements.filter(p=>p.membreId===id).sort((a,b)=>(b.date||"").localeCompare(a.date||"")):[];
+  openSheet(id?fullName(m):"Nouvel adhérent",`
+    <div class="card">
+      <div class="two"><label class="f"><span>Prénom <i>*</i></span><input id="fPre" value="${esc(m.prenom)}" autocapitalize="words" autocomplete="given-name"></label>
+      <label class="f"><span>Nom <i>*</i></span><input id="fNom" value="${esc(m.nom)}" autocapitalize="characters" autocomplete="family-name"></label></div>
+      <div class="two"><label class="f"><span>Catégorie</span><select id="fCat"><option value="">À préciser</option>${CATS.map(c=>`<option ${m.categorie===c?"selected":""}>${c}</option>`).join("")}</select></label>
+      <label class="f"><span>Instrument</span><input id="fIns" value="${esc(m.instrument)}" list="insL"><datalist id="insL">${[...new Set(S.membres.map(x=>x.instrument).filter(Boolean))].map(x=>`<option value="${esc(x)}">`).join("")}</datalist></label></div>
+      ${m.service?`<p class="note">Service d'origine : ${esc(m.service)}</p>`:""}
+      <label class="f"><span>Mail</span><input id="fMail" type="email" value="${esc(m.email)}" autocapitalize="off" autocomplete="email"></label>
+      <label class="f"><span>Téléphone</span><input id="fTel" type="tel" value="${esc(m.tel)}" autocomplete="tel"></label>
+      ${S.isAdmin?`<label class="f"><span>Cotisation spécifique (€, vide = ${esc(cfg().montant)} €)</span><input id="fMt" type="number" inputmode="decimal" value="${esc(m.montantPerso||"")}"></label>
+      <label class="check"><input type="checkbox" id="fPot" ${m.potentiel===true?"checked":""}> Adhérent potentiel (adhésion non confirmée)</label>
+      <label class="check"><input type="checkbox" id="fAct" ${m.actif!==false?"checked":""}> Fiche active</label>`:""}
+    </div>
+    ${S.isAdmin?`<h3>Prélèvement bancaire</h3>
+    <div class="card">
+      <label class="check"><input type="checkbox" id="pAct" ${P.actif?"checked":""}> Paie sa cotisation par prélèvement</label>
+      <div id="pBox" style="${P.actif?"":"display:none"}">
+        <label class="drop" id="ribDrop"><input type="file" id="ribFile" accept="image/*,application/pdf" hidden><span id="ribTxt">${P.ribPath?"RIB joint ✓ — toucher pour le remplacer":"📷 Joindre le RIB : photo ou PDF, glissez-le ici ou touchez"}</span></label><p class="note" id="ribSt"></p>
+        ${P.ribPath?`<p class="note"><a class="lnk" href="#" id="ribVoir">Voir le RIB joint</a></p>`:""}
+        <label class="f"><span>Titulaire du compte</span><input id="pTit" value="${esc(P.titulaire||"")}" placeholder="${esc((m.prenom+" "+m.nom).trim())}"></label>
+        <label class="f"><span>IBAN</span><input id="pIban" class="mono" value="${esc(ibanFmt(P.iban||""))}" autocapitalize="characters" autocomplete="off"><small id="ibanSt" class="note"></small></label>
+        <label class="f"><span>BIC (facultatif)</span><input id="pBic" class="mono" value="${esc(P.bic||"")}" autocapitalize="characters"></label>
+        <div class="two"><label class="f"><span>Référence du mandat (RUM)</span><input id="pRum" class="mono" value="${esc(P.rum)}"></label>
+        <label class="f"><span>Mandat signé le</span><input id="pSig" type="date" value="${esc(P.dateSignature||"")}"></label></div>
+        <label class="f"><span>Prochain prélèvement</span><select id="pSeq"><option value="FRST" ${P.sequence!=="RCUR"?"selected":""}>Premier prélèvement (FRST)</option><option value="RCUR" ${P.sequence==="RCUR"?"selected":""}>Récurrent (RCUR)</option></select></label>
+      </div>
+    </div>`:""}
+    <div class="btns"><button class="btn gold full" id="fSave">Enregistrer</button></div>
+    ${id?`<h3>Cotisations</h3>${hist.length?`<div class="list">${hist.map(p=>`<div class="row" data-p="${esc(p.id)}"><div class="main"><b>${esc(p.saison)}</b><small>${fd(p.date)}${p.recuNum?" · reçu "+esc(p.recuNum):""}</small></div><div class="right">${eur(p.montant)}<br><span class="chip ${p.mode}">${MODES[p.mode]||esc(p.mode)}</span></div></div>`).join("")}</div>`:`<div class="note">Aucune cotisation enregistrée.</div>`}
+    <div class="btns"><button class="btn" id="fPay">+ Encaisser</button>${m.email?`<a class="btn sec" href="mailto:${esc(m.email)}">Mail</a>`:""}${m.tel?`<a class="btn sec" href="tel:${esc(m.tel)}">Appeler</a>`:""}</div>
+    <div class="btns"><button class="btn danger" id="fDel">Supprimer la fiche</button></div>`:""}`,p=>{
+    if(S.isAdmin){
+    $("#pAct",p).onchange=e=>{$("#pBox",p).style.display=e.target.checked?"":"none";};
+    const rv=$("#ribVoir",p);if(rv)rv.onclick=e=>{e.preventDefault();voirRib(P.ribPath);};
+    const ibSt=()=>{const v=$("#pIban",p).value;$("#ibanSt",p).innerHTML=!v?"":(ibanOk(v)?'<span class="ok-t">IBAN valide</span>':'<span class="bad-t">IBAN invalide</span>');};
+    $("#pIban",p).oninput=ibSt;$("#pIban",p).onblur=e=>{e.target.value=ibanFmt(e.target.value);ibSt();};ibSt();
+    dropZone($("#ribDrop",p),$("#ribFile",p),async f=>{
+      const st=$("#ribSt",p);$("#ribTxt",p).textContent="Envoi en cours…";st.textContent="";
+      try{P.ribPath=await envoyerRib(newId,f);P.ribNom=f.name||"rib";$("#ribTxt",p).textContent="RIB joint ✓ — pensez à enregistrer la fiche";st.innerHTML='<span class="ok-t">Recopiez l\'IBAN ci-dessous à partir du RIB.</span>';}
+      catch(e){$("#ribTxt",p).textContent="Échec de l'envoi — réessayer";toast("Envoi impossible : "+errMsg(e));}
+    });
+    }
+    $("#fSave",p).onclick=async()=>{
+      const d={...m,nom:$("#fNom",p).value.trim(),prenom:$("#fPre",p).value.trim(),categorie:$("#fCat",p).value,instrument:$("#fIns",p).value.trim(),email:$("#fMail",p).value.trim().toLowerCase(),tel:$("#fTel",p).value.trim(),montantPerso:S.isAdmin&&$("#fMt",p).value?num($("#fMt",p).value):"",actif:S.isAdmin?$("#fAct",p).checked:true,potentiel:S.isAdmin?$("#fPot",p).checked:false};
+      delete d.id;
+      if(!d.nom||!d.prenom)return toast("Le nom et le prénom sont obligatoires");
+      if(d.email&&!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(d.email))return toast("Adresse mail invalide");
+      const pa=S.isAdmin&&$("#pAct",p).checked;
+      if(!S.isAdmin){delete d.prelevement;const dup=S.membres.find(x=>norm(x.nom)===norm(d.nom)&&norm(x.prenom)===norm(d.prenom));if(dup)return toast(`${fullName(dup)} existe déjà dans la liste`);}
+      else d.prelevement={...P,actif:pa,titulaire:$("#pTit",p).value.trim(),iban:ibanClean($("#pIban",p).value),bic:$("#pBic",p).value.trim().toUpperCase().replace(/\s/g,""),rum:$("#pRum",p).value.trim(),dateSignature:$("#pSig",p).value,sequence:$("#pSeq",p).value};
+      if(!S.isAdmin)d.potentiel=false;
+      if(pa){
+        if(!ibanOk(d.prelevement.iban))return toast("IBAN invalide");
+        if(!bicOk(d.prelevement.bic))return toast("BIC invalide");
+        if(!d.prelevement.rum)return toast("Référence de mandat (RUM) obligatoire");
+        if(!d.prelevement.dateSignature)return toast("Indiquez la date de signature du mandat");
+      }
+      if(!id)d.cree=new Date().toISOString();
+      d.modifie=new Date().toISOString();
+      if(!S.isAdmin){delete d.actif;}
+      if(await put("membres/"+newId,d)){toast("Fiche enregistrée");closeSheet();}
+    };
+    if(id){
+      $("#fPay",p).onclick=()=>paySheet(id);
+      $("#fDel",p).onclick=async()=>{if(await confirmBox(`Supprimer ${fullName(m)} ? Ses cotisations déjà enregistrées restent dans l'historique. Pour un ancien membre, préférez décocher « Fiche active ».`,"Supprimer")){if(await del("membres/"+id)){toast("Fiche supprimée");closeSheet();}}};
+      $$("[data-p]",p).forEach(r=>r.onclick=()=>payDetail(r.dataset.p));
+    }
+  });
+}
+
+function ficheCaissier(m){
+  const hist=S.paiementsAll.filter(p=>p.membreId===m.id&&!p.annule).sort((a,b)=>(b.date||"").localeCompare(a.date||""));
+  openSheet(fullName(m),`<div class="card"><p style="margin:0">${statusChips(m)}</p><p class="note">${esc([m.categorie,m.instrument,m.service].filter(Boolean).join(" · ")||"—")}</p></div>
+    <h3>Cotisations</h3>${hist.length?`<div class="list">${hist.map(p=>`<div class="row" style="cursor:default"><div class="main"><b>${esc(p.saison)}</b><small>${fd(p.date)}</small></div><div class="right">${eur(p.montant)}<br><span class="chip ${p.mode}">${MODES[p.mode]||esc(p.mode)}</span></div></div>`).join("")}</div>`:`<div class="note">Aucune cotisation enregistrée.</div>`}
+    <button class="btn gold full" id="fcPay">+ Encaisser pour ${esc(m.prenom)}</button>
+    <p class="note">Une correction à faire sur cette fiche ? Signalez-la au trésorier.</p>`,p=>{$("#fcPay",p).onclick=()=>paySheet(m.id);});
+}
+
+/* ----- Encaissement ----- */
+function paySheet(mid,editId){
+  const c=cfg(),pe=editId&&S.isAdmin?S.paiements.find(x=>x.id===editId):null;
+  const MODES_OK=Object.entries(MODES).filter(([k])=>S.isAdmin||k!=="prelevement");
+  let mode=pe?pe.mode:"especes",sel=pe?pe.membreId:(mid||"");
+  const M=membresTri().filter(m=>m.actif!==false||m.id===sel);
+  if(!M.length){toast("Ajoutez d'abord un adhérent");return memberSheet();}
+  openSheet(pe?"Modifier l'encaissement":"Encaisser une cotisation",`
+    <div class="card">
+      <label class="f"><span>Adhérent <i>*</i></span>
+        ${mid||pe?"":`<input id="yQ" type="search" placeholder="Filtrer…" style="margin-bottom:6px">`}
+        <select id="yM"></select></label>
+      <div id="yNew" style="display:none;border:1px solid var(--line);border-radius:12px;padding:4px 12px;margin-bottom:6px">
+        <div class="two"><label class="f"><span>Prénom <i>*</i></span><input id="yNP" autocapitalize="words" autocomplete="off"></label>
+        <label class="f"><span>Nom <i>*</i></span><input id="yNN" autocapitalize="characters" autocomplete="off"></label></div>
+        <div class="two"><label class="f"><span>Catégorie</span><select id="yNC"><option value="">À préciser</option>${CATS.map(c=>`<option>${c}</option>`).join("")}</select></label>
+        <label class="f"><span>Instrument</span><input id="yNI"></label></div>
+        <div class="two"><label class="f"><span>Mail</span><input id="yNM" type="email" autocapitalize="off" autocomplete="off"></label>
+        <label class="f"><span>Téléphone</span><input id="yNT" type="tel" autocomplete="off"></label></div>
+      </div>
+      <label class="f"><span>Mode de règlement</span><div class="seg" id="yMode">${MODES_OK.map(([k,l])=>`<button type="button" data-v="${k}" class="${k===mode?"on":""}">${l}</button>`).join("")}</div></label>
+      <div class="two"><label class="f"><span>Montant versé (€)</span><input id="yAmt" type="number" inputmode="decimal" step="0.01"></label>
+      <label class="f"><span>Date</span><input id="yDate" type="date" value="${esc(pe?pe.date:today())}"></label></div>
+      <div class="ventil" id="yVen"></div>
+      <div class="two"><label class="f"><span>Saison</span><input id="ySai" value="${esc(pe?pe.saison:c.saison)}" inputmode="numeric"></label>
+      <label class="f"><span id="yRefL">Référence</span><input id="yRef" value="${esc(pe?pe.ref||"":"")}"></label></div>
+      <label class="f"><span>Note</span><input id="yNote" value="${esc(pe?pe.note||"":"")}"></label>
+    </div>
+    <button class="btn gold full" id="ySave">${pe?"Enregistrer":"Valider l'encaissement"}</button>
+    <p class="note" id="yHint"></p>`,p=>{
+    const du=()=>montantDu(membre(sel));
+    const canNew=!pe&&!mid;
+    const showNew=()=>{$("#yNew",p).style.display=sel==="__new"?"":"none";};
+    const fillM=f=>{const q=norm(f||"");const L=M.filter(m=>!q||norm(m.nom+m.prenom+m.instrument).includes(q));
+      if(canNew&&q&&!L.length&&sel!=="__new"){sel="__new";const w=String(f).trim().split(/\s+/);if(!$("#yNP",p).value)$("#yNP",p).value=w.length>1?w[0]:"";if(!$("#yNN",p).value)$("#yNN",p).value=w.length>1?w.slice(1).join(" "):w[0];}
+      $("#yM",p).innerHTML=`<option value="">— choisir —</option>`+(canNew?`<option value="__new" ${sel==="__new"?"selected":""}>+ Nouvel adhérent</option>`:"")+M.filter(m=>!q||norm(m.nom+m.prenom+m.instrument).includes(q)).map(m=>`<option value="${esc(m.id)}" ${m.id===sel?"selected":""}>${esc(fullName(m))}${aJour(m)?" ✓":(isPot(m)?" (potentiel)":"")}</option>`).join("");showNew();};
+    fillM();const yq=$("#yQ",p);if(yq)yq.oninput=()=>fillM(yq.value);
+    const showV=()=>{const t=r2(num($("#yAmt",p).value)),cc=Math.min(t,du()),s=r2(t-cc);$("#yVen",p).innerHTML=t>0?`<div><span>Cotisation</span><b>${eur(cc)}</b></div>${s>0?`<div><span>${esc(c.libSurplus)}</span><b>${eur(s)}</b></div>`:""}`:"";};
+    $("#yAmt",p).value=pe?pe.montant:du();showV();$("#yAmt",p).oninput=showV;
+    $("#yM",p).onchange=e=>{sel=e.target.value;showNew();if(sel==="__new")setTimeout(()=>$("#yNP",p).focus(),50);if(!pe)$("#yAmt",p).value=du();showV();};
+    const hint=()=>{$("#yRefL",p).textContent={sumup:"N° de transaction SumUp",helloasso:"Référence HelloAsso",cheque:"N° du chèque",virement:"Référence du virement",prelevement:"Référence de la remise",especes:"Référence (facultatif)"}[mode];
+      $("#yHint",p).textContent=mode==="especes"&&!pe?"Un accusé de réception numéroté sera créé pour l'adhérent.":"";};
+    hint();
+    $$("#yMode button",p).forEach(b=>b.onclick=()=>{mode=b.dataset.v;$$("#yMode button",p).forEach(x=>x.classList.toggle("on",x===b));hint();});
+    $("#ySave",p).onclick=async()=>{
+      if(!sel)return toast("Choisissez l'adhérent");
+      const amt=r2(num($("#yAmt",p).value));if(amt<=0)return toast("Montant invalide");
+      if(amt<du()&&!await confirmBox(`Le montant (${eurTxt(amt)}) est inférieur à la cotisation (${eurTxt(du())}). Enregistrer quand même ?`,"Enregistrer",false))return;
+      const saison=$("#ySai",p).value.trim();if(!/^\d{4}$/.test(saison))return toast("Saison : une année, par exemple 2026");
+      if(+saison<PREMIERE_SAISON)return toast(`Pas de saisie avant ${PREMIERE_SAISON}`);
+      if(($("#yDate",p).value||today())<PREMIERE_SAISON+"-01-01")return toast(`Pas de saisie datée d'avant ${PREMIERE_SAISON}`);
+      let m=membre(sel),created=false;
+      if(sel==="__new"){
+        const nm={nom:$("#yNN",p).value.trim(),prenom:$("#yNP",p).value.trim(),categorie:$("#yNC",p).value,instrument:$("#yNI",p).value.trim(),email:$("#yNM",p).value.trim().toLowerCase(),tel:$("#yNT",p).value.trim(),actif:true,potentiel:false,cree:new Date().toISOString()};
+        if(!nm.nom||!nm.prenom)return toast("Prénom et nom du nouvel adhérent obligatoires");
+        if(nm.email&&!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(nm.email))return toast("Adresse mail invalide");
+        const dup=S.membres.find(x=>norm(x.nom)===norm(nm.nom)&&norm(x.prenom)===norm(nm.prenom));
+        if(dup)return toast(`${fullName(dup)} existe déjà : choisissez-le dans la liste`);
+        const nid=uid();if(!await put("membres/"+nid,nm))return;
+        sel=nid;m={id:nid,...nm};created=true;
+      }
+      const d={membreId:sel,nomAffiche:fullName(m),saison,montant:amt,cotis:Math.min(amt,du()),mode,date:$("#yDate",p).value||today(),ref:$("#yRef",p).value.trim(),note:$("#yNote",p).value.trim()};
+      if(pe){
+        if(pe.mode!=="especes"&&mode==="especes"&&!pe.recuNum)return toast("Pour passer en espèces, annulez et ressaisissez l'encaissement");
+        if(await upd("paiements/"+pe.id,d)){toast("Encaissement modifié");closeSheet();}
+        return;
+      }
+      $("#ySave",p).disabled=true;
+      const row=await insertPaiement({...d,id:uid()});
+      $("#ySave",p).disabled=false;
+      if(row){
+        toast(created?"Adhérent créé et encaissement enregistré":"Encaissement enregistré");
+        if(mode==="especes")recuSheet(row);else closeSheet();
+      }
+    };
+  });
+}
+function payDetail(pid){
+  const p=S.paiementsAll.find(x=>x.id===pid);if(!p)return;const m=membre(p.membreId),v=ventil(p),c=cfg();
+  const mien=p.encaissePar===S.uid;
+  openSheet("Encaissement",`<div class="card">
+      <div style="font-size:28px;font-weight:750;${p.annule?"text-decoration:line-through;opacity:.6":""}">${eur(p.montant)}</div>
+      <p>${p.annule?'<span class="chip bad" style="margin:0">Annulé</span>':`<span class="chip ${p.mode}" style="margin:0">${MODES[p.mode]||esc(p.mode)}</span>`}${p.compta?`<span class="chip ok">Compta ${fd(p.compta)}</span>`:""}${p.mode==="especes"&&p.remisLe?`<span class="chip ok">Remis le ${fd(p.remisLe)}</span>`:""}</p>
+      <div class="ventil"><div><span>Cotisation</span><b>${eur(v.cotis)}</b></div>${v.surplus>0?`<div><span>${esc(c.libSurplus)}</span><b>${eur(v.surplus)}</b></div>`:""}</div>
+      <p><b>${esc(m?fullName(m):p.nomAffiche)}</b><br>Saison ${esc(p.saison)} · ${fd(p.date)}${p.ref?"<br>Réf. "+esc(p.ref):""}${p.recuNum?"<br>Reçu "+esc(p.recuNum):""}${p.note?"<br>"+esc(p.note):""}<br><span class="note">Encaissé par ${esc(nomProfil(p.encaissePar))}</span></p>
+      ${p.annule?`<div class="banner">Annulé par ${esc(nomProfil(p.annulePar))} le ${fd(String(p.annuleLe||"").slice(0,10))}${p.annuleMotif?" : "+esc(p.annuleMotif):""}</div>`:""}
+      ${p.signalement?`<div class="banner">${p.signalementTraite?"Signalement traité":"Erreur signalée"} : « ${esc(p.signalement)} »</div>`:""}
+    </div>
+    ${p.annule?"":`<div class="btns">${p.recuNum?`<button class="btn gold" id="dR">Accusé de réception</button>`:""}${S.isAdmin&&!p.compta?`<button class="btn" id="dE">Modifier</button>`:""}</div>
+    ${S.isAdmin?(p.compta?`<p class="note">Déjà en comptabilité : pour une erreur, enregistrez une correction (contrepassation) dans votre logiciel comptable.</p>`:`<div class="btns">${p.signalement&&!p.signalementTraite?`<button class="btn sec" id="dT">Marquer le signalement comme traité</button>`:""}<button class="btn danger" id="dA">Annuler l'encaissement</button></div>`)
+      :(mien?`<div class="btns"><button class="btn sec" id="dS">${p.signalement&&!p.signalementTraite?"Modifier le signalement":"Signaler une erreur au trésorier"}</button></div>`:"")}`}`,el=>{
+    const r=$("#dR",el);if(r)r.onclick=()=>recuSheet(p);
+    const e=$("#dE",el);if(e)e.onclick=()=>paySheet(null,pid);
+    const t=$("#dT",el);if(t)t.onclick=async()=>{if(await upd("paiements/"+pid,{signalementTraite:true})){toast("Signalement traité");closeSheet();}};
+    const a=$("#dA",el);if(a)a.onclick=()=>openSheet("Annuler l'encaissement",`<div class="card"><p style="margin-top:0">${esc(m?fullName(m):p.nomAffiche)} · ${eur(p.montant)} · ${MODES[p.mode]||""}</p><label class="f"><span>Motif de l'annulation <i>*</i></span><input id="aM" value="${esc(p.signalement||"")}" placeholder="Erreur de montant, doublon, mauvais adhérent…"></label></div>
+      <p class="note">L'encaissement reste visible dans l'historique, barré, avec votre nom et le motif. Il n'est plus compté nulle part.</p><button class="btn danger full" id="aOk">Annuler l'encaissement</button>`,q=>{
+      $("#aOk",q).onclick=async()=>{const mo=$("#aM",q).value.trim();if(!mo)return toast("Indiquez le motif");
+        if(await upd("paiements/"+pid,{annule:true,annulePar:S.uid,annuleLe:new Date().toISOString(),annuleMotif:mo,signalementTraite:true})){toast("Encaissement annulé");closeSheet();}};});
+    const sg=$("#dS",el);if(sg)sg.onclick=()=>openSheet("Signaler une erreur",`<div class="card"><p style="margin-top:0">${esc(m?fullName(m):p.nomAffiche)} · ${eur(p.montant)}</p><label class="f"><span>Que faut-il corriger ?</span><textarea id="sT" style="min-height:90px" placeholder="Ex. : le montant était de 15 €, pas 10 €">${esc(p.signalementTraite?"":p.signalement||"")}</textarea></label></div><button class="btn gold full" id="sOk">Envoyer au trésorier</button>`,q=>{
+      $("#sOk",q).onclick=async()=>{const tx=$("#sT",q).value.trim();if(!tx)return toast("Décrivez l'erreur");
+        const {error}=await S.sb.rpc("signaler_erreur",{p_id:pid,p_texte:tx});if(error)return toast("Impossible : "+errMsg(error));toast("Signalement envoyé");reload();closeSheet();};});
+  });
+}
+
+/* ----- Accusé de réception espèces ----- */
+function recuTexte(p){
+  const c=cfg(),m=membre(p.membreId),v=ventil(p);
+  return`${c.asso}\n${c.adresse?c.adresse+"\n":""}\nACCUSÉ DE RÉCEPTION N° ${p.recuNum||"—"}\n\nL'${c.asso} reconnaît avoir reçu de ${m?fullName(m):p.nomAffiche} la somme de ${eurTxt(v.total)} en espèces, le ${fd(p.date)}, au titre de la saison ${p.saison}.\n\nCotisation : ${eurTxt(v.cotis)}${v.surplus>0?`\n${c.libSurplus} : ${eurTxt(v.surplus)}`:""}\n\nPour l'association${c.tresorier?", "+c.tresorier:""}\n\nCe document atteste le versement en espèces. Il ne constitue pas un reçu fiscal.`;
+}
+function recuSheet(p){
+  const c=cfg(),m=membre(p.membreId),v=ventil(p);
+  openSheet("Accusé de réception "+(p.recuNum||""),`
+    <div class="recu"><span class="n">N° ${esc(p.recuNum||"—")}</span><h4>${esc(c.asso)}</h4><div style="white-space:pre-line;color:#555;font-size:13px">${esc(c.adresse)}</div>
+      <p style="margin-top:14px">Reçu de <b>${esc(m?fullName(m):p.nomAffiche)}</b></p>
+      <div class="amt">${eur(v.total)} en espèces</div>
+      <div class="ventil"><div><span>Cotisation</span><b>${eur(v.cotis)}</b></div>${v.surplus>0?`<div><span>${esc(c.libSurplus)}</span><b>${eur(v.surplus)}</b></div>`:""}</div>
+      <p>le ${fd(p.date)} · saison ${esc(p.saison)}</p>
+      <p style="margin-top:18px">Pour l'association${c.tresorier?", "+esc(c.tresorier):""}</p>
+      <small>Ce document atteste le versement en espèces. Il ne constitue pas un reçu fiscal.</small></div>
+    <div class="btns"><button class="btn gold" id="rPdf">Télécharger le PDF</button></div>
+    <div class="btns">${m&&m.email?`<a class="btn" href="${esc(mailHref(m.email,`Accusé de réception ${p.recuNum} – saison ${p.saison}`,recuTexte(p)))}" target="_blank" rel="noopener">Envoyer par mail</a>`:""}<button class="btn sec" id="rCp">Copier le texte</button></div>
+    ${m&&m.email?`<p class="note">Mail de l'adhérent : ${esc(m.email)}. Si Mail ne s'ouvre pas, copiez le texte.</p>`:`<p class="note">Pas d'adresse mail pour cet adhérent : téléchargez le PDF pour l'envoyer ou l'imprimer.</p>`}
+    <button class="btn sec full" data-close>Terminer</button>`,el=>{
+    $("#rCp",el).onclick=()=>copy(recuTexte(p));
+    $("#rPdf",el).onclick=async()=>{try{await saveFile(`recu-${p.recuNum||"especes"}.pdf`,recuPdf(p));}catch(e){toast(e.message);}};
+  });
+}
+function recuPdf(p){
+  const J=window.jspdf&&window.jspdf.jsPDF;if(!J)throw new Error("Module PDF non chargé : vérifiez la connexion");
+  const c=cfg(),m=membre(p.membreId),v=ventil(p),clean=s=>String(s||"").replace(/[  ]/g," ").replace(/€/g,"EUR");
+  const money=n=>r2(n).toFixed(2).replace(".",",")+" EUR";
+  const d=new J({unit:"mm",format:"a5"}),W=148;let y=18;
+  d.setDrawColor(201,161,59);d.setLineWidth(1);d.line(12,10,W-12,10);
+  d.setFont("helvetica","bold");d.setFontSize(13);d.splitTextToSize(clean(c.asso),95).forEach(l=>{d.text(l,12,y);y+=6;});
+  d.setFont("helvetica","normal");d.setFontSize(9);if(c.adresse)clean(c.adresse).split("\n").forEach(l=>{d.text(l,12,y);y+=4.5;});
+  d.setFont("helvetica","bold");d.setFontSize(10);d.text("N° "+clean(p.recuNum||"-"),W-12,18,{align:"right"});
+  y=Math.max(y,40)+6;d.setFontSize(16);d.text("Accusé de réception",12,y);y+=10;
+  d.setFont("helvetica","normal");d.setFontSize(11);
+  const txt=`L'${clean(c.asso)} reconnaît avoir reçu de ${clean(m?fullName(m):p.nomAffiche)} la somme de ${money(v.total)} en espèces, le ${fd(p.date)}, au titre de la saison ${clean(p.saison)}.`;
+  d.splitTextToSize(txt,W-24).forEach(l=>{d.text(l,12,y);y+=6;});
+  y+=4;d.setFontSize(10);d.text("Cotisation",12,y);d.text(money(v.cotis),W-12,y,{align:"right"});
+  if(v.surplus>0){y+=6;d.text(clean(c.libSurplus),12,y);d.text(money(v.surplus),W-12,y,{align:"right"});}
+  y+=7;d.setFont("helvetica","bold");d.setFontSize(14);d.text("Total",12,y);d.text(money(v.total),W-12,y,{align:"right"});
+  y+=14;d.setFont("helvetica","normal");d.setFontSize(10);d.text(`Fait le ${fd(today())}`,12,y);y+=6;d.text("Pour l'association"+(c.tresorier?", "+clean(c.tresorier):""),12,y);
+  y+=6;d.setDrawColor(180);d.setLineWidth(.3);d.rect(12,y,60,22);d.setFontSize(8);d.setTextColor(140);d.text("Signature",14,y+4);
+  d.setTextColor(110);d.setFontSize(8);d.text("Ce document atteste le versement en espèces. Il ne constitue pas un reçu fiscal.",12,198);
+  return d.output("blob");
+}
+
+/* ----- Événements ----- */
+function eventEdit(id){
+  const e=id?S.evenements.find(x=>x.id===id):{titre:"",date:"",heure:"",lieu:"",description:"",places:""};if(!e)return;
+  openSheet(id?"Modifier l'événement":"Nouvel événement",`<div class="card">
+    <label class="f"><span>Titre <i>*</i></span><input id="eT" value="${esc(e.titre)}" placeholder="Concert, répétition, assemblée générale…"></label>
+    <div class="two"><label class="f"><span>Date <i>*</i></span><input id="eD" type="date" value="${esc(e.date)}"></label><label class="f"><span>Heure</span><input id="eH" type="time" value="${esc(e.heure)}"></label></div>
+    <label class="f"><span>Lieu</span><input id="eL" value="${esc(e.lieu)}"></label>
+    <label class="f"><span>Places (facultatif)</span><input id="eP" type="number" value="${esc(e.places)}"></label>
+    <label class="f"><span>Description</span><textarea id="eDe">${esc(e.description)}</textarea></label></div>
+    <button class="btn gold full" id="eS">Enregistrer</button>${id?`<div class="btns"><button class="btn danger" id="eX">Supprimer l'événement</button></div>`:""}`,p=>{
+    $("#eS",p).onclick=async()=>{
+      const d={titre:$("#eT",p).value.trim(),date:$("#eD",p).value,heure:$("#eH",p).value,lieu:$("#eL",p).value.trim(),places:$("#eP",p).value?num($("#eP",p).value):"",description:$("#eDe",p).value.trim()};
+      if(!d.titre||!d.date)return toast("Titre et date obligatoires");
+      if(await put("evenements/"+(id||uid()),d)){toast("Événement enregistré");closeSheet();}
+    };
+    const x=$("#eX",p);if(x)x.onclick=async()=>{if(await confirmBox("Supprimer cet événement ?","Supprimer")){if(await del("evenements/"+id)){toast("Événement supprimé");closeSheet();}}};
+  });
+}
+function eventSheet(id){
+  const e=S.evenements.find(x=>x.id===id);if(!e)return;
+  const L=inscrits(id).map(i=>membre(i.membreId)).filter(Boolean).sort((a,b)=>(a.nom||"").localeCompare(b.nom||"","fr"));
+  const ids=new Set(L.map(m=>m.id));
+  const autres=membresTri().filter(m=>isMembre(m)&&!ids.has(m.id));
+  openSheet(e.titre,`<div class="card"><b>${fd(e.date)} ${esc(e.heure||"")}</b>${e.lieu?"<br>"+esc(e.lieu):""}${e.description?`<p style="white-space:pre-line">${esc(e.description)}</p>`:""}</div>
+    <h3>Inscrits (${L.length}${e.places?"/"+esc(e.places):""})</h3>
+    ${L.length?`<div class="list">${L.map(m=>`<div class="row" style="cursor:default"><div class="av">${esc(initials(m))}</div><div class="main"><b>${esc(fullName(m))}</b>${m.instrument?`<small>${esc(m.instrument)}</small>`:""}</div><div class="right"><button class="btn sm danger" data-rm="${esc(m.id)}">Retirer</button></div></div>`).join("")}</div>`:`<div class="note">Personne pour l'instant.</div>`}
+    <h3>Inscrire un adhérent</h3><div class="card"><select id="iAdd"><option value="">— choisir —</option>${autres.map(m=>`<option value="${esc(m.id)}">${esc(fullName(m))}</option>`).join("")}</select><div class="btns"><button class="btn" id="iAddB">Inscrire</button></div></div>
+    <div class="btns"><button class="btn sec" id="eEd">Modifier</button>${L.length?`<button class="btn sec" id="eCp">Copier la liste</button>`:""}</div>`,p=>{
+    const again=()=>setTimeout(()=>{if(!$("#sheet").classList.contains("hidden"))eventSheet(id);},400);
+    $$("[data-rm]",p).forEach(b=>b.onclick=async()=>{try{await chk(S.sb.from("inscriptions").delete().eq("evenementId",id).eq("membreId",b.dataset.rm));reload();again();}catch(er){toast("Impossible : "+errMsg(er));}});
+    $("#iAddB",p).onclick=async()=>{const mid=$("#iAdd",p).value;if(!mid)return;if(e.places&&L.length>=num(e.places)&&!await confirmBox("L'événement est complet. Inscrire quand même ?","Inscrire",false))return;
+      try{await chk(S.sb.from("inscriptions").insert({evenementId:id,membreId:mid}));reload();again();}catch(er){toast("Impossible : "+errMsg(er));}};
+    $("#eEd",p).onclick=()=>eventEdit(id);
+    const cp=$("#eCp",p);if(cp)cp.onclick=()=>copy(`${e.titre} – ${fd(e.date)}\n`+L.map(m=>"- "+fullName(m)).join("\n"));
+  });
+}
+
+/* ================= CONNEXION ================= */
+VIEWS.login={
+  shell:()=>`<div class="login">${intro("Espace du bureau",S.recovery?"Nouveau mot de passe":"Connexion",S.recovery?"Choisissez votre nouveau mot de passe.":"Réservé au bureau de l'Amicale.")}
+    ${CONFIG_OK?(S.recovery?`<div class="card"><label class="f"><span>Nouveau mot de passe (8 caractères minimum)</span><input id="lNp" type="password" autocomplete="new-password"></label></div><button class="btn gold full" id="lNpOk">Enregistrer</button>`
+    :`<div class="card"><label class="f"><span>Adresse mail</span><input id="lE" type="email" autocomplete="username" autocapitalize="off"></label>
+    <label class="f"><span>Mot de passe</span><input id="lP" type="password" autocomplete="current-password"></label></div>
+    <button class="btn gold full" id="lGo">Se connecter</button>
+    <p class="note" style="text-align:center"><a class="lnk" href="#" id="lOubli">Mot de passe oublié ?</a></p>`):`<div class="banner">L'appli n'est pas encore reliée à sa base de données (fichier config.js à compléter).</div>`}
+    <div id="lMsg"></div></div>`,
+  bind(){
+    if(!CONFIG_OK)return;
+    if(S.recovery){$("#lNpOk").onclick=async()=>{const v=$("#lNp").value;if(v.length<8)return toast("8 caractères minimum");const {error}=await S.sb.auth.updateUser({password:v});if(error)return toast("Impossible : "+errMsg(error));S.recovery=false;toast("Mot de passe enregistré");start();};return;}
+    const go=async()=>{const email=$("#lE").value.trim(),password=$("#lP").value;if(!email||!password)return toast("Mail et mot de passe");
+      $("#lGo").disabled=true;const {error}=await S.sb.auth.signInWithPassword({email,password});$("#lGo").disabled=false;
+      if(error)return toast(/invalid/i.test(error.message)?"Mail ou mot de passe incorrect":"Connexion impossible : "+errMsg(error));};
+    $("#lGo").onclick=go;$("#lP").onkeydown=e=>{if(e.key==="Enter")go();};
+    $("#lOubli").onclick=async e=>{e.preventDefault();const email=$("#lE").value.trim();if(!email)return toast("Indiquez d'abord votre adresse mail");
+      const {error}=await S.sb.auth.resetPasswordForEmail(email,{redirectTo:location.origin+location.pathname});
+      $("#lMsg").innerHTML=error?`<div class="banner">Impossible : ${esc(errMsg(error))}</div>`:`<div class="banner ok">Si ce mail correspond à un compte, un lien pour choisir un nouveau mot de passe vient d'être envoyé.</div>`;};
+  }
+};
+
+/* ================= DEMARRAGE ================= */
+const CONFIG_OK=!!(window.SUPABASE_URL&&window.SUPABASE_ANON_KEY&&!/A_COMPLETER/.test(window.SUPABASE_URL+window.SUPABASE_ANON_KEY)&&window.supabase);
+let reloadH=0,channel=null;
+function reload(){clearTimeout(reloadH);reloadH=setTimeout(loadAll,250);}
+async function loadAll(){
+  if(!S.session)return;
+  try{
+    const q=t=>S.sb.from(t).select("*");
+    const [cf,pr,me,pa,ev,ins,md]=await Promise.all([q("config"),q("profils"),q("membres"),q("paiements"),S.isAdmin?q("evenements"):Promise.resolve({data:[]}),S.isAdmin?q("inscriptions"):Promise.resolve({data:[]}),S.isAdmin?q("mandats"):Promise.resolve({data:[]})]);
+    for(const r of [cf,pr,me,pa,ev,ins,md])if(r.error)throw r.error;
+    S.config=(cf.data[0]&&cf.data[0].data)||null;S.profils=pr.data;
+    const mand={};md.data.forEach(x=>mand[x.membreId]=x);
+    S.membres=me.data.map(m=>mand[m.id]?{...m,prelevement:mand[m.id]}:m);
+    S.paiementsAll=pa.data.map(p=>({...p,montant:num(p.montant),cotis:p.cotis==null?null:num(p.cotis)}));S.paiements=S.paiementsAll.filter(p=>!p.annule);
+    S.evenements=ev.data;S.inscriptions=ins.data;S.offline=false;
+  }catch(e){S.offline=true;console.error(e);}
+  refresh();
+}
+async function start(){
+  const {data:{session}}=await S.sb.auth.getSession();
+  S.session=session;S.uid=session&&session.user.id;S.profil=null;S.isAdmin=false;
+  if(session&&!S.recovery){
+    const {data,error}=await S.sb.from("profils").select("*").eq("id",S.uid).maybeSingle();
+    if(error||!data){S.session=null;go();$("#view").insertAdjacentHTML("beforeend",`<div class="banner" style="max-width:380px;margin:0 auto">Ce compte n'a pas encore d'accès à l'appli. Demandez au trésorier.</div>`);await S.sb.auth.signOut({scope:"local"});return;}
+    S.profil=data;S.isAdmin=data.role==="admin";S.myName=data.nom;
+    await loadAll();
+    if(!channel){channel=S.sb.channel("amicale").on("postgres_changes",{event:"*",schema:"public"},()=>reload()).subscribe();}
+  }else if(channel){S.sb.removeChannel(channel);channel=null;}
+  go();
+}
+(function init(){
+  if(!CONFIG_OK){go();return;}
+  S.sb=window.supabase.createClient(window.SUPABASE_URL,window.SUPABASE_ANON_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
+  S.sb.auth.onAuthStateChange((ev)=>{if(ev==="PASSWORD_RECOVERY"){S.recovery=true;go();return;}if(ev==="SIGNED_IN"||ev==="SIGNED_OUT")setTimeout(start,0);});
+  document.addEventListener("visibilitychange",()=>{if(!document.hidden&&S.session)reload();});
+  setInterval(()=>{if(S.session&&!document.hidden)reload();},60000);
+  start();
+})();
+</script>
+</body>
+</html>
