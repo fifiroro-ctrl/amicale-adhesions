@@ -726,7 +726,7 @@ async function haLive(){
     <button class="btn gold full" id="haSync">Synchroniser HelloAsso</button><p class="note" id="haRes" style="margin:8px 0 0"></p></div><h3>Ou importer un fichier</h3>`;
   $("#haSync",el).onclick=async()=>{const b=$("#haSync",el);b.disabled=true;$("#haRes",el).textContent="Synchronisation en cours…";
     try{const r=await haAppel({action:"synchroniser"});reload();
-      $("#haRes",el).textContent=`${r.nouveaux} nouveau${r.nouveaux>1?"x":""} paiement${r.nouveaux>1?"s":""} · ${r.deja} déjà présent${r.deja>1?"s":""}${r.membresCrees?` · ${r.membresCrees} fiche${r.membresCrees>1?"s":""} créée${r.membresCrees>1?"s":""}`:""}${r.ignores?` · ${r.ignores} ignoré${r.ignores>1?"s":""} (non payé ou remboursé)`:""}.${(r.aRattacher||[]).length?` À rattacher à la main (plusieurs fiches portent ce nom, importez le fichier HelloAsso pour choisir) : ${r.aRattacher.join(" ; ")}.`:""}`;}
+      $("#haRes",el).textContent=`${r.nouveaux} nouveau${r.nouveaux>1?"x":""} paiement${r.nouveaux>1?"s":""} · ${r.deja} déjà présent${r.deja>1?"s":""}${r.membresCrees?` · ${r.membresCrees} fiche${r.membresCrees>1?"s":""} créée${r.membresCrees>1?"s":""}`:""}${r.anterieurs?` · ${r.anterieurs} antérieur${r.anterieurs>1?"s":""} au 25/11/2026, ignoré${r.anterieurs>1?"s":""}`:""}${r.ignores?` · ${r.ignores} ignoré${r.ignores>1?"s":""} (non payé ou remboursé)`:""}.${(r.aRattacher||[]).length?` À rattacher à la main (plusieurs fiches portent ce nom, importez le fichier HelloAsso pour choisir) : ${r.aRattacher.join(" ; ")}.`:""}`;}
     catch(err){$("#haRes",el).textContent="Synchronisation impossible : "+err.message;}
     b.disabled=false;};
 }
