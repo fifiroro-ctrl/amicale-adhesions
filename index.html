@@ -753,13 +753,13 @@ VIEWS.sauvegarde={
 /* ----- Import HelloAsso / SumUp ----- */
 VIEWS.import={
   shell:()=>`<a class="back" href="#plus">‹ Plus</a>${intro("Les paiements en ligne","Importer HelloAsso / SumUp","Déposez l'export : les paiements sont rattachés aux fiches.")}
-    <div id="haLive"></div>
+    <div id="haLive"></div><div id="suLive"></div>
     <div class="seg" id="src"><button data-v="helloasso" class="on">HelloAsso</button><button data-v="sumup">SumUp</button><button data-v="virement">Autre (virement)</button></div>
     <label class="drop" id="imDrop" style="margin-top:12px"><input type="file" id="imFile" accept=".csv,.xlsx,.xls,text/csv,text/plain,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden>Glissez l'export (Excel ou CSV) ici ou touchez pour le choisir</label>
     <p class="note">HelloAsso : Administration › Paiements (ou la campagne d'adhésion) › Exporter. SumUp : Ventes › Mes rapports › Rapport des transactions. Nom, prénom, e-mail, montant, date, référence, campagne et statut sont reconnus. Pour SumUp, le nom peut aussi être lu dans la description de la vente.</p>
     <div id="imPrev"></div>`,
   bind(){
-    haLive();
+    haLive();suLive();
     S._src="helloasso";S._imp=null;
     $$("#src button").forEach(b=>b.onclick=()=>{S._src=b.dataset.v;$$("#src button").forEach(x=>x.classList.toggle("on",x===b));if(S._imp)renderImport();});
     dropZone($("#imDrop"),$("#imFile"),async f=>{try{S._imp=analyseRows(await readTable(f));renderImport();}catch(e){toast("Fichier illisible : "+e.message);}});
@@ -785,6 +785,51 @@ async function haLive(){
       $("#haRes",el).textContent=`${r.nouveaux} nouveau${r.nouveaux>1?"x":""} paiement${r.nouveaux>1?"s":""} · ${r.deja} déjà présent${r.deja>1?"s":""}${r.membresCrees?` · ${r.membresCrees} fiche${r.membresCrees>1?"s":""} créée${r.membresCrees>1?"s":""}`:""}${r.ventes||r.ventesDeja?` · ventes : ${r.ventes} nouvelle${r.ventes>1?"s":""}, ${r.ventesDeja} déjà présente${r.ventesDeja>1?"s":""}`:""}${r.ventesAnnulees?` · ${r.ventesAnnulees} vente${r.ventesAnnulees>1?"s":""} remboursée${r.ventesAnnulees>1?"s":""}`:""}${r.anterieurs?` · ${r.anterieurs} paiement${r.anterieurs>1?"s":""} trop ancien${r.anterieurs>1?"s":""}, ignoré${r.anterieurs>1?"s":""}`:""}${r.ignores?` · ${r.ignores} ignoré${r.ignores>1?"s":""} (non payé ou remboursé)`:""}.${(r.aRattacher||[]).length?` À rattacher à la main (plusieurs fiches portent ce nom, importez le fichier HelloAsso pour choisir) : ${r.aRattacher.join(" ; ")}.`:""}`;}
     catch(err){$("#haRes",el).textContent="Synchronisation impossible : "+err.message;}
     b.disabled=false;};
+}
+// SumUp en direct (fonction « sumup ») : chaque paiement carte est rattaché à une cotisation, une vente ou écarté.
+async function suAppel(body){
+  const {data,error}=await S.sb.functions.invoke("sumup",{body});
+  if(error){let m=error.message;try{const j=await error.context.json();if(j&&j.error)m=j.error;}catch(e){}throw new Error(m);}
+  if(data&&data.error)throw new Error(data.error);
+  return data;
+}
+async function suLive(){
+  const el=$("#suLive");if(!el||!S.isAdmin)return;
+  let e;try{e=await suAppel({action:"etat"});}catch(err){el.innerHTML=`<div class="banner">SumUp en direct : ${esc(err.message)}</div>`;return;}
+  if(!e.pret){el.innerHTML="";return;}
+  el.innerHTML=`<div class="card"><b>SumUp en direct</b><p class="note" style="margin:4px 0 10px">Les paiements carte depuis le 1er janvier 2026, à rattacher un par un : cotisation, vente de livre, vente de CD ou à écarter. Un paiement traité n'est plus proposé.</p>
+    <button class="btn gold full" id="suGo">Paiements SumUp à rattacher</button><div id="suL"></div></div>`;
+  $("#suGo",el).onclick=suCharger;
+}
+async function suCharger(){
+  const box=$("#suL"),b=$("#suGo");if(!box)return;b.disabled=true;box.innerHTML=`<p class="note">Lecture des paiements SumUp…</p>`;
+  let r;try{r=await suAppel({action:"liste"});}catch(err){box.innerHTML=`<div class="banner">${esc(err.message)}</div>`;b.disabled=false;return;}
+  b.disabled=false;S._su=r.paiements||[];suRendre();
+}
+function suRendre(){
+  const box=$("#suL");if(!box)return;const L=S._su||[];
+  if(!L.length){box.innerHTML=`<div class="banner ok" style="margin-top:10px">Aucun paiement SumUp à rattacher.</div>`;return;}
+  const mem=membresTri(),sais=[String(cfg().saison),String(+cfg().saison+1)];
+  const optM=sel=>`<option value="">— Adhérent —</option>`+mem.map(m=>`<option value="${esc(m.id)}" ${m.id===sel?"selected":""}>${esc(fullName(m))}</option>`).join("");
+  box.innerHTML=`<p class="note" style="margin-top:10px">${L.length} paiement${L.length>1?"s":""} à rattacher. Les propositions viennent du libellé saisi au terminal : vérifiez-les.</p>
+    ${L.map((t,i)=>`<div class="card" data-su="${i}" style="margin:8px 0;padding:12px">
+      <div style="display:flex;justify-content:space-between;gap:8px"><b>${eur(t.montant)}</b><small class="note" style="margin:0">${fd(t.date)}${t.heure?" "+esc(t.heure):""}</small></div>
+      <div style="margin:4px 0">${esc(t.libelle||"(sans libellé)")}</div><small class="note" style="margin:0">Encaissé par ${esc(t.caissier||"—")}</small>
+      <div class="two" style="margin-top:8px"><select data-k="type"><option value="">— Choisir —</option><option value="cotisation" ${t.type==="cotisation"?"selected":""}>Cotisation</option><option value="livres" ${t.type==="livres"?"selected":""}>Vente de livre</option><option value="cd" ${t.type==="cd"?"selected":""}>Vente de CD</option><option value="ignore">À écarter</option></select>
+      <select data-k="saison" ${t.type==="cotisation"?"":"hidden"}>${sais.map(s=>`<option ${s===(t.saison||String(t.date).slice(0,4))?"selected":""}>${s}</option>`).join("")}</select></div>
+      <select data-k="membre" style="margin-top:8px" ${t.type==="cotisation"?"":"hidden"}>${optM(t.membre)}</select>
+      <button class="btn sm full" data-ok="${i}" style="margin-top:8px">Valider</button></div>`).join("")}
+    <button class="btn gold full" id="suTout">Valider tous les paiements complétés</button>`;
+  $$("[data-su]",box).forEach(c=>{const ty=$('[data-k="type"]',c);ty.onchange=()=>{const co=ty.value==="cotisation";$('[data-k="saison"]',c).hidden=!co;$('[data-k="membre"]',c).hidden=!co;};});
+  const lire=c=>{const i=+c.dataset.su,t=S._su[i];return {i,t,decision:$('[data-k="type"]',c).value,membreId:$('[data-k="membre"]',c).value,saison:$('[data-k="saison"]',c).value};};
+  const pret=x=>x.decision&&(x.decision!=="cotisation"||x.membreId);
+  const valider=async x=>{await suAppel({action:"rattacher",id:x.t.id,decision:x.decision,membreId:x.membreId,saison:x.saison});x.t._fait=true;};
+  $$("[data-ok]",box).forEach(btn=>btn.onclick=async()=>{const x=lire(btn.closest("[data-su]"));if(!pret(x))return toast(x.decision?"Choisissez l'adhérent":"Choisissez cotisation, vente ou à écarter");
+    btn.disabled=true;try{await valider(x);S._su=S._su.filter(t=>!t._fait);suRendre();reload();toast("Rattaché");}catch(err){btn.disabled=false;toast(err.message);}});
+  $("#suTout",box).onclick=async()=>{const X=$$("[data-su]",box).map(lire).filter(pret);if(!X.length)return toast("Aucun paiement complété");
+    if(!await confirmBox(`Valider ${X.length} paiement${X.length>1?"s":""} SumUp ?`,"Valider",false))return;
+    let ok=0,ko=0,der="";for(const x of X){try{await valider(x);ok++;}catch(err){ko++;der=err.message;}}
+    S._su=S._su.filter(t=>!t._fait);suRendre();reload();toast(ko?`${ok} validé${ok>1?"s":""}, ${ko} en erreur : ${der}`:`${ok} paiement${ok>1?"s":""} rattaché${ok>1?"s":""}`);};
 }
 // Fichier déposé, ou fiche glissée depuis l'app Contacts (certains navigateurs la reçoivent en texte vCard et non en fichier).
 function fichierDepose(dt){
