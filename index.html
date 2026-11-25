@@ -7,6 +7,7 @@
 <meta name="theme-color" content="#16244a">
 <title>Amicale — Adhésions</title>
 <link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" href="AMGPP-Logo-Web.png">
 <link rel="apple-touch-icon" href="icone.png">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="config.js"></script>
@@ -168,7 +169,7 @@ const DEF_CFG={
   asso:"Amicale de la Musique des Gardiens de la Paix",sigle:"AMGP",adresse:"",montant:10,
   tresorier:"",emailContact:"",ics:"",ibanAsso:"",bicAsso:"",prochainPrelevement:"",
   libSurplus:"Surplus / dons",fraisSumup:1.75,
-  comptes:{cotis:"756000",surplus:"754100",frais:"627000",livres:"7071",cd:"7072",especes:"530000",cheque:"511200",virement:"512000",prelevement:"512000",sumup:"511300",helloasso:"511400"},
+  comptes:{cotis:"756000",surplus:"754100",frais:"627000",livres:"7071",cd:"7072",attente:"471000",especes:"530000",cheque:"511200",virement:"512000",prelevement:"512000",sumup:"511300",helloasso:"511400"},
   msgRelance:"Bonjour {prenom},\n\nSauf erreur de notre part, votre cotisation {saison} à l'{asso} ({montant}) n'a pas encore été réglée.\n\nVous pouvez la régler en espèces lors d'une répétition, par carte (SumUp) ou en ligne via HelloAsso.\n\nMerci et à bientôt,\nLe bureau",
   msgPrenotif:"Bonjour {prenom},\n\nNous vous informons que votre cotisation {saison} d'un montant de {montant} sera prélevée le {date} sur votre compte bancaire (mandat SEPA n° {rum}).\n\nAucune démarche n'est nécessaire de votre part.\n\nCordialement,\nLe bureau de l'{asso}"
 };
@@ -348,6 +349,8 @@ VIEWS.accueil={
     if(aRegler)todo.push([`${aRegler} cotisation${aRegler>1?"s":""} à relancer`,"#relances","bad"]);
     if(mandatsKo)todo.push([`${mandatsKo} mandat${mandatsKo>1?"s":""} de prélèvement incomplet${mandatsKo>1?"s":""}`,"#prelevements","warn"]);
     if(nonCompta)todo.push([`${nonCompta} encaissement${nonCompta>1?"s":""} à basculer en compta`,"#compta","warn"]);
+    const attente=(S.ventesAll||[]).filter(v=>v.categorie==="attente"&&!v.annule).length;
+    if(S.isAdmin&&attente)todo.push([`${attente} règlement${attente>1?"s":""} en compte d'attente à affecter`,"#ventes","warn"]);
     const sig=S.paiementsAll.filter(p=>p.signalement&&!p.signalementTraite&&!p.annule).length;
     if(sig)todo.unshift([`${sig} erreur${sig>1?"s":""} signalée${sig>1?"s":""} par les caissiers`,"#caisses","bad"]);
     const esp=S.paiements.filter(p=>p.mode==="especes"&&!p.remisLe&&p.encaissePar&&p.encaissePar!==S.uid).reduce((t,p)=>t+num(p.montant),0);
@@ -490,7 +493,7 @@ VIEWS.plus={
   shell:()=>!S.isAdmin?`${intro("Votre espace","Mon compte","")}${compteHtml()}`:`${intro("Votre espace","Plus","Relances, banque, comptabilité et réglages.")}<div class="list">
     ${[["relances","Relances et mails","Cotisations à régler · pré-notification des prélèvements"],
        ["cartes","Cartes d'adhérent","Imprimer · envoyer · suivre les cartes"],
-       ["ventes","Ventes (livres, CD)","Boutiques HelloAsso · passées en compta"],
+       ["ventes","Ventes et compte d'attente","Livres, CD · règlements à affecter"],
        ["prelevements","Prélèvements SEPA","Préparer le fichier à déposer à la banque"],
        ["compta","Bascule en compta","Exporter les écritures pour le logiciel comptable"],
        ["import","Importer HelloAsso / SumUp","Fichier Excel ou CSV des paiements"],
@@ -614,12 +617,12 @@ async function genSepa(sel,record){
 
 /* ----- Compta ----- */
 /* ----- Ventes (livres, CD) : hors cotisations ----- */
-const VENTE_CAT={livres:"Livres",cd:"CD",dons:"Dons",autres:"Autres"};
-const venteCompte=v=>{const c=cfg().comptes;return v.categorie==="dons"?c.surplus:(c[v.categorie]||c.livres);};
+const VENTE_CAT={livres:"Livres",cd:"CD",dons:"Dons",autres:"Autres",attente:"Compte d'attente"};
+const venteCompte=v=>{const c=cfg().comptes;return v.categorie==="dons"?c.surplus:v.categorie==="attente"?(c.attente||"471000"):(c[v.categorie]||c.livres);};
 function ventesAnnee(an){return (S.ventesAll||[]).filter(v=>String(v.date||"").slice(0,4)===String(an));}
 SUBVIEWS.push("ventes");
 VIEWS.ventes={
-  shell:()=>`<a class="back" href="#plus">‹ Plus</a>${intro("Les recettes","Ventes","Livres et CD vendus sur les boutiques HelloAsso. Elles ne créent ni fiche adhérent ni carte.")}
+  shell:()=>`<a class="back" href="#plus">‹ Plus</a>${intro("Les recettes","Ventes et compte d'attente","Livres et CD vendus, et règlements dont l'affectation reste à confirmer.")}
     <div class="two"><select id="vA" aria-label="Année"></select><select id="vC" aria-label="Catégorie"><option value="">Toutes</option>${Object.entries(VENTE_CAT).map(([k,l])=>`<option value="${k}">${l}</option>`).join("")}</select></div><div id="vL"></div>`,
   bind(){$("#vA").onchange=e=>{S._va=e.target.value;this.update();};$("#vC").onchange=e=>{S._vc=e.target.value;this.update();};},
   update(){
@@ -627,6 +630,7 @@ VIEWS.ventes={
     if(!S.ventesAll){el.innerHTML=`<div class="banner">Les ventes ne sont pas encore activées dans la base de données.</div>`;return;}
     const ans=[...new Set([String(new Date().getFullYear()),...S.ventesAll.map(v=>String(v.date||"").slice(0,4))])].filter(Boolean).sort().reverse();
     if(!S._va||!ans.includes(S._va))S._va=ans[0];
+    if(S._vc===undefined&&S.ventesAll.some(v=>v.categorie==="attente"&&!v.annule))S._vc="attente";
     $("#vA").innerHTML=ans.map(a=>`<option ${a===S._va?"selected":""}>${esc(a)}</option>`).join("");$("#vC").value=S._vc||"";
     const L=ventesAnnee(S._va).filter(v=>!S._vc||v.categorie===S._vc).sort((a,b)=>(b.date||"").localeCompare(a.date||"")||String(b.id).localeCompare(String(a.id)));
     const ok=L.filter(v=>!v.annule),tot=k=>ok.filter(v=>v.categorie===k).reduce((s,v)=>s+v.montant,0);
@@ -635,6 +639,9 @@ VIEWS.ventes={
       ${L.length?`<div class="list">${L.map(v=>`<div class="row ${v.annule?"annule":""}" data-v="${esc(v.id)}"><div class="main"><b>${esc(v.produit||VENTE_CAT[v.categorie]||"Vente")}</b><small>${fd(v.date)} · ${esc(v.acheteur||"—")}${v.annule?" · remboursée / annulée":""}${v.compta?" · en compta le "+fd(v.compta):""}</small></div><div class="right">${eur(v.montant)}<br><span class="chip ${v.mode}">${esc(VENTE_CAT[v.categorie]||v.categorie)}</span></div></div>`).join("")}</div>`:`<div class="empty">Aucune vente ${S._vc?"dans cette catégorie ":""}en ${esc(S._va)}.</div>`}
       <p class="note">Les commandes payées sur les boutiques « Nos livres » et « Catalogue de CD » arrivent toutes seules ; le bouton « Synchroniser HelloAsso » (Plus › Importer) rattrape celles qui manqueraient. Une commande remboursée sur HelloAsso est barrée ici et sort de la compta. Elles passent dans la bascule en compta avec les cotisations.</p>`;
     $$("[data-v]",el).forEach(r=>r.onclick=()=>{const v=S.ventesAll.find(x=>x.id===r.dataset.v);if(v)venteFiche(v);});
+    const nA=S.ventesAll.filter(v=>v.categorie==="attente"&&!v.annule).length;
+    if(nA&&S._vc!=="attente")el.insertAdjacentHTML("afterbegin",`<div class="banner">${nA} règlement${nA>1?"s":""} en compte d'attente à affecter. <a href="#" id="vAtt" class="lnk">Voir</a></div>`);
+    const va=$("#vAtt",el);if(va)va.onclick=e=>{e.preventDefault();S._vc="attente";this.update();};
   }
 };
 function venteFiche(v){
@@ -644,7 +651,15 @@ function venteFiche(v){
     ${v.email?`<div><span>Mail</span><b>${esc(v.email)}</b></div>`:""}<div><span>Paiement</span><b>${esc(MODES[v.mode]||v.mode)} ${esc(v.ref||"")}</b></div>
     <div><span>Commande</span><b>${esc(v.boutique||"")} ${esc(v.commande||"")}</b></div>${v.compta?`<div><span>En compta</span><b>${fd(v.compta)}</b></div>`:""}</div></div>
     ${v.compta?`<p class="note">Déjà passée en compta : elle ne peut plus être modifiée ici.</p>`:`<label class="f"><span>Catégorie</span><select id="vCat">${Object.entries(VENTE_CAT).map(([k,l])=>`<option value="${k}" ${k===v.categorie?"selected":""}>${l}</option>`).join("")}</select></label>
-    <div class="btns"><button class="btn" id="vSave">Enregistrer</button><button class="btn ${v.annule?"sec":"danger"}" id="vAnn">${v.annule?"Rétablir":"Annuler la vente"}</button></div>`}`,q=>{
+    <div class="btns"><button class="btn" id="vSave">Enregistrer</button><button class="btn ${v.annule?"sec":"danger"}" id="vAnn">${v.annule?"Rétablir":"Annuler la vente"}</button></div>
+    ${v.categorie==="attente"&&!v.annule?`<h3>C'est une cotisation ?</h3><div class="card"><div class="two"><select id="vMb"><option value="">— Adhérent —</option>${membresTri().map(m=>`<option value="${esc(m.id)}">${esc(fullName(m))}</option>`).join("")}</select>
+      <select id="vSa">${[String(cfg().saison),String(+cfg().saison+1)].map(s=>`<option>${s}</option>`).join("")}</select></div>
+      <button class="btn gold full" id="vCot" style="margin-top:8px">Affecter en cotisation</button><p class="note" style="margin-bottom:0">Le règlement quitte le compte d'attente et devient la cotisation de l'adhérent choisi (sa carte se crée).</p></div>`:""}`}`,q=>{
+    const vc=$("#vCot",q);if(vc)vc.onclick=async()=>{const mid=$("#vMb",q).value,sa=$("#vSa",q).value,m=membre(mid);if(!m)return toast("Choisissez l'adhérent");
+      if(!await confirmBox(`Affecter ${eur(v.montant)} en cotisation ${sa} de ${fullName(m)} ?`,"Affecter",false))return;
+      const pid=/^ha-att-/.test(v.id)?v.id.replace(/^ha-att-/,"ha-"):/^su-v-/.test(v.id)?v.id.replace(/^su-v-/,"su-"):"att-"+v.id;
+      try{await chk(S.sb.from("paiements").insert(clean("paiements",{id:pid,membreId:mid,nomAffiche:fullName(m),saison:sa,montant:v.montant,mode:v.mode,date:v.date,ref:v.ref||"",note:`Affecté depuis le compte d'attente · ${v.produit||""}`})));
+        await chk(S.sb.from("ventes").delete().eq("id",v.id));toast("Affecté en cotisation");closeSheet();reload();}catch(e){toast("Impossible : "+errMsg(e));}};
     const s=$("#vSave",q);if(s)s.onclick=async()=>{if(await upd("ventes/"+v.id,{categorie:$("#vCat",q).value},true)){toast("Enregistré");closeSheet();}};
     const a=$("#vAnn",q);if(a)a.onclick=async()=>{if(!v.annule&&!await confirmBox("Annuler cette vente ? Elle restera visible, barrée, et ne passera pas en compta.","Annuler la vente"))return;if(await upd("ventes/"+v.id,{annule:!v.annule},true)){toast(v.annule?"Vente rétablie":"Vente annulée");closeSheet();}};
   });
@@ -666,7 +681,7 @@ VIEWS.compta={
         <div><span>Cotisations (${esc(c.comptes.cotis)})</span><b>${eur(T.cot)}</b></div>
         <div><span>${esc(c.libSurplus)} (${esc(c.comptes.surplus)})</span><b>${eur(T.sur)}</b></div>
         ${T.fr>0?`<div><span>Frais SumUp estimés (${esc(c.comptes.frais)})</span><b>− ${eur(T.fr)}</b></div>`:""}
-        ${Object.entries(VENTE_CAT).filter(([k])=>TV(k)>0).map(([k,l])=>`<div><span>${({livres:"Ventes de livres",cd:"Ventes de CD",dons:"Dons (boutiques)"})[k]||"Autres ventes"} (${esc(venteCompte({categorie:k}))})</span><b>${eur(TV(k))}</b></div>`).join("")}
+        ${Object.entries(VENTE_CAT).filter(([k])=>TV(k)>0).map(([k,l])=>`<div><span>${({livres:"Ventes de livres",cd:"Ventes de CD",dons:"Dons (boutiques)",attente:"Compte d'attente"})[k]||"Autres ventes"} (${esc(venteCompte({categorie:k}))})</span><b>${eur(TV(k))}</b></div>`).join("")}
         <div><span><b>Total encaissé</b></span><b>${eur(T.tot+totV)}</b></div></div></div>
       <div class="list">${by.map(([k,P])=>[k,[...P,...V.filter(v=>v.mode===k).map(v=>({montant:v.montant}))]]).concat(Object.keys(MODES).filter(k=>!by.some(b=>b[0]===k)&&V.some(v=>v.mode===k)).map(k=>[k,V.filter(v=>v.mode===k).map(v=>({montant:v.montant}))])).map(([k,P])=>`<div class="row" style="cursor:default"><div class="main"><b>${MODES[k]}</b><small>${P.length} opération${P.length>1?"s":""} · compte ${esc(c.comptes[k])}</small></div><div class="right"><b>${eur(P.reduce((s,p)=>s+num(p.montant),0))}</b></div></div>`).join("")}</div>
       <button class="btn gold full" id="expC">Exporter le journal (CSV)</button>
@@ -690,7 +705,7 @@ async function exportCompta(L,V=[]){
   });
   V.forEach((v,i)=>{
     const j=v.mode==="especes"?"CA":"BQ",piece=`VTE-${(v.date||"").replace(/-/g,"")}-${String(i+1).padStart(3,"0")}`;
-    const lib=`${({livres:"Vente livre",cd:"Vente CD",dons:"Don"})[v.categorie]||"Vente"} ${/^dons?$/i.test(v.produit||"")?"":v.produit||""} ${v.acheteur||""}`.replace(/\s+/g," ").trim();
+    const lib=`${({livres:"Vente livre",cd:"Vente CD",dons:"Don",attente:"Règlement à affecter"})[v.categorie]||"Vente"} ${/^dons?$/i.test(v.produit||"")?"":v.produit||""} ${v.acheteur||""}`.replace(/\s+/g," ").trim();
     const base=[j,fd(v.date)],tail=[MODES[v.mode]||v.mode,[v.ref,v.commande].filter(Boolean).join(" / ")];
     rows.push([...base,c.comptes[v.mode]||c.comptes.virement,piece,lib,dec(v.montant),"",...tail]);
     rows.push([...base,venteCompte(v),piece,lib,"",dec(v.montant),...tail]);
@@ -782,7 +797,7 @@ async function haLive(){
     <button class="btn gold full" id="haSync">Synchroniser HelloAsso</button><p class="note" id="haRes" style="margin:8px 0 0"></p></div><h3>Ou importer un fichier</h3>`;
   $("#haSync",el).onclick=async()=>{const b=$("#haSync",el);b.disabled=true;$("#haRes",el).textContent="Synchronisation en cours…";
     try{const r=await haAppel({action:"synchroniser"});reload();
-      $("#haRes",el).textContent=`${r.nouveaux} nouveau${r.nouveaux>1?"x":""} paiement${r.nouveaux>1?"s":""} · ${r.deja} déjà présent${r.deja>1?"s":""}${r.membresCrees?` · ${r.membresCrees} fiche${r.membresCrees>1?"s":""} créée${r.membresCrees>1?"s":""}`:""}${r.ventes||r.ventesDeja?` · ventes : ${r.ventes} nouvelle${r.ventes>1?"s":""}, ${r.ventesDeja} déjà présente${r.ventesDeja>1?"s":""}`:""}${r.ventesAnnulees?` · ${r.ventesAnnulees} vente${r.ventesAnnulees>1?"s":""} remboursée${r.ventesAnnulees>1?"s":""}`:""}${r.anterieurs?` · ${r.anterieurs} paiement${r.anterieurs>1?"s":""} trop ancien${r.anterieurs>1?"s":""}, ignoré${r.anterieurs>1?"s":""}`:""}${r.ignores?` · ${r.ignores} ignoré${r.ignores>1?"s":""} (non payé ou remboursé)`:""}.${(r.aRattacher||[]).length?` À rattacher à la main (plusieurs fiches portent ce nom, importez le fichier HelloAsso pour choisir) : ${r.aRattacher.join(" ; ")}.`:""}`;}
+      $("#haRes",el).textContent=`${r.nouveaux} nouveau${r.nouveaux>1?"x":""} paiement${r.nouveaux>1?"s":""} · ${r.deja} déjà présent${r.deja>1?"s":""}${r.membresCrees?` · ${r.membresCrees} fiche${r.membresCrees>1?"s":""} créée${r.membresCrees>1?"s":""}`:""}${r.ventes||r.ventesDeja?` · ventes : ${r.ventes} nouvelle${r.ventes>1?"s":""}, ${r.ventesDeja} déjà présente${r.ventesDeja>1?"s":""}`:""}${r.ventesAnnulees?` · ${r.ventesAnnulees} vente${r.ventesAnnulees>1?"s":""} remboursée${r.ventesAnnulees>1?"s":""}`:""}${r.anterieurs?` · ${r.anterieurs} paiement${r.anterieurs>1?"s":""} trop ancien${r.anterieurs>1?"s":""}, ignoré${r.anterieurs>1?"s":""}`:""}${r.ignores?` · ${r.ignores} ignoré${r.ignores>1?"s":""} (non payé ou remboursé)`:""}.${(r.aRattacher||[]).length?` Mis en compte d'attente (plusieurs fiches portent ce nom, à affecter dans Plus › Ventes et compte d'attente) : ${r.aRattacher.join(" ; ")}.`:""}`;}
     catch(err){$("#haRes",el).textContent="Synchronisation impossible : "+err.message;}
     b.disabled=false;};
 }
@@ -797,7 +812,7 @@ async function suLive(){
   const el=$("#suLive");if(!el||!S.isAdmin)return;
   let e;try{e=await suAppel({action:"etat"});}catch(err){el.innerHTML=`<div class="banner">SumUp en direct : ${esc(err.message)}</div>`;return;}
   if(!e.pret){el.innerHTML="";return;}
-  el.innerHTML=`<div class="card"><b>SumUp en direct</b><p class="note" style="margin:4px 0 10px">Les paiements carte depuis le 1er janvier 2026, à rattacher un par un : cotisation, vente de livre, vente de CD ou à écarter. Un paiement traité n'est plus proposé.</p>
+  el.innerHTML=`<div class="card"><b>SumUp en direct</b><p class="note" style="margin:4px 0 10px">Les paiements carte depuis le 1er janvier 2026, à rattacher un par un : cotisation, vente de livre, vente de CD, compte d'attente ou à écarter. Un paiement traité n'est plus proposé.</p>
     <button class="btn gold full" id="suGo">Paiements SumUp à rattacher</button><div id="suL"></div></div>`;
   $("#suGo",el).onclick=suCharger;
 }
@@ -806,18 +821,20 @@ async function suCharger(){
   let r;try{r=await suAppel({action:"liste"});}catch(err){box.innerHTML=`<div class="banner">${esc(err.message)}</div>`;b.disabled=false;return;}
   b.disabled=false;S._su=r.paiements||[];suRendre();
 }
+// En cas de doute (pas de libellé exploitable, ou adhérent non reconnu) : compte d'attente par défaut.
+const suDoute=t=>!t.type||(t.type==="cotisation"&&!t.membre);
 function suRendre(){
   const box=$("#suL");if(!box)return;const L=S._su||[];
   if(!L.length){box.innerHTML=`<div class="banner ok" style="margin-top:10px">Aucun paiement SumUp à rattacher.</div>`;return;}
   const mem=membresTri(),sais=[String(cfg().saison),String(+cfg().saison+1)];
   const optM=sel=>`<option value="">— Adhérent —</option>`+mem.map(m=>`<option value="${esc(m.id)}" ${m.id===sel?"selected":""}>${esc(fullName(m))}</option>`).join("");
-  box.innerHTML=`<p class="note" style="margin-top:10px">${L.length} paiement${L.length>1?"s":""} à rattacher. Les propositions viennent du libellé saisi au terminal : vérifiez-les.</p>
+  box.innerHTML=`<p class="note" style="margin-top:10px">${L.length} paiement${L.length>1?"s":""} à rattacher. Les propositions viennent du libellé saisi au terminal : vérifiez-les. En cas de doute, le règlement va en compte d'attente : vous l'affecterez plus tard depuis Plus › Ventes.</p>
     ${L.map((t,i)=>`<div class="card" data-su="${i}" style="margin:8px 0;padding:12px">
       <div style="display:flex;justify-content:space-between;gap:8px"><b>${eur(t.montant)}</b><small class="note" style="margin:0">${fd(t.date)}${t.heure?" "+esc(t.heure):""}</small></div>
       <div style="margin:4px 0">${esc(t.libelle||"(sans libellé)")}</div><small class="note" style="margin:0">Encaissé par ${esc(t.caissier||"—")}</small>
-      <div class="two" style="margin-top:8px"><select data-k="type"><option value="">— Choisir —</option><option value="cotisation" ${t.type==="cotisation"?"selected":""}>Cotisation</option><option value="livres" ${t.type==="livres"?"selected":""}>Vente de livre</option><option value="cd" ${t.type==="cd"?"selected":""}>Vente de CD</option><option value="ignore">À écarter</option></select>
-      <select data-k="saison" ${t.type==="cotisation"?"":"hidden"}>${sais.map(s=>`<option ${s===(t.saison||String(t.date).slice(0,4))?"selected":""}>${s}</option>`).join("")}</select></div>
-      <select data-k="membre" style="margin-top:8px" ${t.type==="cotisation"?"":"hidden"}>${optM(t.membre)}</select>
+      <div class="two" style="margin-top:8px"><select data-k="type"><option value="">— Choisir —</option><option value="cotisation" ${t.type==="cotisation"&&!suDoute(t)?"selected":""}>Cotisation</option><option value="livres" ${t.type==="livres"?"selected":""}>Vente de livre</option><option value="cd" ${t.type==="cd"?"selected":""}>Vente de CD</option><option value="attente" ${suDoute(t)?"selected":""}>Compte d'attente</option><option value="ignore">À écarter</option></select>
+      <select data-k="saison" ${t.type==="cotisation"&&!suDoute(t)?"":"hidden"}>${sais.map(s=>`<option ${s===(t.saison||String(t.date).slice(0,4))?"selected":""}>${s}</option>`).join("")}</select></div>
+      <select data-k="membre" style="margin-top:8px" ${t.type==="cotisation"&&!suDoute(t)?"":"hidden"}>${optM(t.membre)}</select>
       <button class="btn sm full" data-ok="${i}" style="margin-top:8px">Valider</button></div>`).join("")}
     <button class="btn gold full" id="suTout">Valider tous les paiements complétés</button>`;
   $$("[data-su]",box).forEach(c=>{const ty=$('[data-k="type"]',c);ty.onchange=()=>{const co=ty.value==="cotisation";$('[data-k="saison"]',c).hidden=!co;$('[data-k="membre"]',c).hidden=!co;};});
@@ -948,7 +965,7 @@ VIEWS.reglages={
       ${F("libSurplus","Nom du surplus versé au-delà de la cotisation")}<p class="note">Un versement de 15 € donne 10 € de cotisation et 5 € de surplus. En comptabilité associative, un tel versement volontaire est souvent un don (compte 754) : à confirmer avec le trésorier.</p></div>
     <h3>Prélèvements SEPA</h3><div class="card">${F("ics","Identifiant créancier SEPA (ICS)","text","FR12ZZZ123456")}${F("ibanAsso","IBAN de l'association")}${F("bicAsso","BIC de l'association")}${F("prochainPrelevement","Prochain prélèvement","date")}<p class="note">L'ICS se demande à votre banque. Sans lui la banque refuse les prélèvements.</p></div>
     <h3>SumUp</h3><div class="card">${F("fraisSumup","Commission SumUp (%)","number")}<p class="note">Sert à estimer les frais bancaires dans l'export compta.</p></div>
-    <h3>Comptes comptables</h3><div class="card"><div class="two">${[["cotis","Cotisations (crédit)"],["surplus","Surplus et dons (crédit)"],["livres","Ventes de livres (crédit)"],["cd","Ventes de CD (crédit)"],["frais","Frais bancaires"],...Object.entries(MODES)].map(([k,l])=>`<label class="f"><span>${l}</span><input data-cpt="${k}" value="${esc(c.comptes[k])}"></label>`).join("")}</div></div>
+    <h3>Comptes comptables</h3><div class="card"><div class="two">${[["cotis","Cotisations (crédit)"],["surplus","Surplus et dons (crédit)"],["livres","Ventes de livres (crédit)"],["cd","Ventes de CD (crédit)"],["attente","Compte d'attente (crédit)"],["frais","Frais bancaires"],...Object.entries(MODES)].map(([k,l])=>`<label class="f"><span>${l}</span><input data-cpt="${k}" value="${esc(c.comptes[k])}"></label>`).join("")}</div></div>
     <h3>Modèles de mails</h3><div class="card"><p class="note">Variables : {prenom} {nom} {saison} {montant} {date} {rum} {asso}</p><label class="f"><span>Relance de cotisation</span><textarea id="c_msgRelance" style="min-height:180px">${esc(c.msgRelance)}</textarea></label><label class="f"><span>Pré-notification de prélèvement</span><textarea id="c_msgPrenotif" style="min-height:180px">${esc(c.msgPrenotif)}</textarea></label></div>
     <button class="btn gold full" id="cSave">Enregistrer les réglages</button>`;},
   bind(){
