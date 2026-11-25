@@ -2974,13 +2974,16 @@ async function enLigneAffiche(){
   const J=window.jspdf&&window.jspdf.jsPDF;if(!J)return toast("Module PDF non chargé : vérifiez la connexion");
   const c=cfg(),doc=new J({unit:"mm",format:"a4"}),url=enLigneUrl("1");
   const logo=await carteChargerLogo();
-  if(logo){const cv=document.createElement("canvas");cv.width=cv.height=600;cv.getContext("2d").drawImage(logo,0,0,600,600);doc.addImage(cv.toDataURL("image/png"),"PNG",80,14,50,50);}
+  if(logo){const cv=document.createElement("canvas");cv.width=cv.height=600;const x=cv.getContext("2d");x.fillStyle="#fff";x.fillRect(0,0,600,600);x.drawImage(logo,0,0,600,600);doc.addImage(cv.toDataURL("image/jpeg",0.92),"JPEG",80,14,50,50);}
   doc.setTextColor(22,36,74);doc.setFont("helvetica","bold");doc.setFontSize(13);
   doc.text("AMICALE DE LA MUSIQUE DES GARDIENS DE LA PAIX DE PARIS",105,74,{align:"center"});
   doc.setFontSize(38);doc.text("Adhérez à l'Amicale",105,96,{align:"center"});
   doc.setFont("helvetica","normal");doc.setFontSize(20);doc.setTextColor(60,60,70);
   doc.text(`Cotisation ${c.saison} : ${String(num(c.montant)).replace(".",",")} €`,105,110,{align:"center"});
-  const q=qrCanvas(url,900);doc.addImage(q.toDataURL("image/png"),"PNG",55,120,100,100);
+  // QR code dessiné en carrés vectoriels : net à l'impression et fichier léger
+  const qr=new QRCodeLib.QRCode(-1,QRCodeLib.L.M);qr.addData(url);qr.make();
+  const nq=qr.getModuleCount(),mq=100/nq;doc.setFillColor(22,36,74);
+  for(let r=0;r<nq;r++)for(let k=0;k<nq;k++)if(qr.isDark(r,k))doc.rect(55+k*mq,120+r*mq,mq+0.02,mq+0.02,"F");
   doc.setTextColor(22,36,74);doc.setFont("helvetica","bold");doc.setFontSize(18);
   doc.text("Scannez avec l'appareil photo de votre téléphone",105,232,{align:"center"});
   doc.setFont("helvetica","normal");doc.setFontSize(13);doc.setTextColor(80,80,90);
