@@ -168,7 +168,7 @@ const DEF_CFG={
   asso:"Amicale de la Musique des Gardiens de la Paix",sigle:"AMGP",adresse:"",montant:10,
   tresorier:"",emailContact:"",ics:"",ibanAsso:"",bicAsso:"",prochainPrelevement:"",
   libSurplus:"Surplus / dons",fraisSumup:1.75,
-  comptes:{cotis:"756000",surplus:"754100",frais:"627000",especes:"530000",cheque:"511200",virement:"512000",prelevement:"512000",sumup:"511300",helloasso:"511400"},
+  comptes:{cotis:"756000",surplus:"754100",frais:"627000",livres:"7071",cd:"7072",especes:"530000",cheque:"511200",virement:"512000",prelevement:"512000",sumup:"511300",helloasso:"511400"},
   msgRelance:"Bonjour {prenom},\n\nSauf erreur de notre part, votre cotisation {saison} à l'{asso} ({montant}) n'a pas encore été réglée.\n\nVous pouvez la régler en espèces lors d'une répétition, par carte (SumUp) ou en ligne via HelloAsso.\n\nMerci et à bientôt,\nLe bureau",
   msgPrenotif:"Bonjour {prenom},\n\nNous vous informons que votre cotisation {saison} d'un montant de {montant} sera prélevée le {date} sur votre compte bancaire (mandat SEPA n° {rum}).\n\nAucune démarche n'est nécessaire de votre part.\n\nCordialement,\nLe bureau de l'{asso}"
 };
@@ -230,7 +230,8 @@ const COLS={
   mandats:["membreId","actif","titulaire","iban","bic","rum","dateSignature","sequence","ribPath","ribNom"],
   paiements:["id","membreId","nomAffiche","saison","montant","cotis","mode","date","ref","note","recuNum","compta","encaissePar","annule","annulePar","annuleLe","annuleMotif","signalement","signalementLe","signalementTraite","remisLe","cree"],
   evenements:["id","titre","date","heure","lieu","places","description"]
-};
+,
+  ventes:["id","date","categorie","produit","montant","mode","acheteur","email","boutique","ref","commande","annule","compta"]};
 const NULLABLE=new Set(["montantPerso","derniereRelance","modifie","dateSignature","compta","remisLe","annuleLe","annulePar","places","cotis","signalementLe","membreId","encaissePar"]);
 function clean(t,o){const r={};for(const k of COLS[t]){if(o[k]===undefined)continue;let v=o[k];if(v===""&&NULLABLE.has(k))v=null;r[k]=v;}return r;}
 function errMsg(e){if(!e)return"erreur";const m=e.message||String(e);if(/row-level security|permission|42501/i.test(m))return"vous n'avez pas les droits pour cette action";if(/check constraint/i.test(m))return"donnée refusée (saison ou date avant 2026 ?)";if(/duplicate key/i.test(m))return"cet élément existe déjà";if(/Failed to fetch|NetworkError/i.test(m))return"pas de connexion";return m;}
@@ -489,6 +490,7 @@ VIEWS.plus={
   shell:()=>!S.isAdmin?`${intro("Votre espace","Mon compte","")}${compteHtml()}`:`${intro("Votre espace","Plus","Relances, banque, comptabilité et réglages.")}<div class="list">
     ${[["relances","Relances et mails","Cotisations à régler · pré-notification des prélèvements"],
        ["cartes","Cartes d'adhérent","Imprimer · envoyer · suivre les cartes"],
+       ["ventes","Ventes (livres, CD)","Boutiques HelloAsso · passées en compta"],
        ["prelevements","Prélèvements SEPA","Préparer le fichier à déposer à la banque"],
        ["compta","Bascule en compta","Exporter les écritures pour le logiciel comptable"],
        ["import","Importer HelloAsso / SumUp","Fichier Excel ou CSV des paiements"],
@@ -611,6 +613,42 @@ async function genSepa(sel,record){
 }
 
 /* ----- Compta ----- */
+/* ----- Ventes (livres, CD) : hors cotisations ----- */
+const VENTE_CAT={livres:"Livres",cd:"CD",dons:"Dons",autres:"Autres"};
+const venteCompte=v=>{const c=cfg().comptes;return v.categorie==="dons"?c.surplus:(c[v.categorie]||c.livres);};
+function ventesAnnee(an){return (S.ventesAll||[]).filter(v=>String(v.date||"").slice(0,4)===String(an));}
+SUBVIEWS.push("ventes");
+VIEWS.ventes={
+  shell:()=>`<a class="back" href="#plus">‹ Plus</a>${intro("Les recettes","Ventes","Livres et CD vendus sur les boutiques HelloAsso. Elles ne créent ni fiche adhérent ni carte.")}
+    <div class="two"><select id="vA" aria-label="Année"></select><select id="vC" aria-label="Catégorie"><option value="">Toutes</option>${Object.entries(VENTE_CAT).map(([k,l])=>`<option value="${k}">${l}</option>`).join("")}</select></div><div id="vL"></div>`,
+  bind(){$("#vA").onchange=e=>{S._va=e.target.value;this.update();};$("#vC").onchange=e=>{S._vc=e.target.value;this.update();};},
+  update(){
+    const el=$("#vL");if(!el)return;
+    if(!S.ventesAll){el.innerHTML=`<div class="banner">Les ventes ne sont pas encore activées dans la base de données.</div>`;return;}
+    const ans=[...new Set([String(new Date().getFullYear()),...S.ventesAll.map(v=>String(v.date||"").slice(0,4))])].filter(Boolean).sort().reverse();
+    if(!S._va||!ans.includes(S._va))S._va=ans[0];
+    $("#vA").innerHTML=ans.map(a=>`<option ${a===S._va?"selected":""}>${esc(a)}</option>`).join("");$("#vC").value=S._vc||"";
+    const L=ventesAnnee(S._va).filter(v=>!S._vc||v.categorie===S._vc).sort((a,b)=>(b.date||"").localeCompare(a.date||"")||String(b.id).localeCompare(String(a.id)));
+    const ok=L.filter(v=>!v.annule),tot=k=>ok.filter(v=>v.categorie===k).reduce((s,v)=>s+v.montant,0);
+    el.innerHTML=`<div class="card"><div class="ventil">${Object.entries(VENTE_CAT).filter(([k])=>tot(k)>0).map(([k,l])=>`<div><span>${l} (${esc(venteCompte({categorie:k}))})</span><b>${eur(tot(k))}</b></div>`).join("")||`<div><span>Aucune vente</span><b>${eur(0)}</b></div>`}
+      <div><span><b>Total ${esc(S._va)}</b></span><b>${eur(ok.reduce((s,v)=>s+v.montant,0))}</b></div></div></div>
+      ${L.length?`<div class="list">${L.map(v=>`<div class="row ${v.annule?"annule":""}" data-v="${esc(v.id)}"><div class="main"><b>${esc(v.produit||VENTE_CAT[v.categorie]||"Vente")}</b><small>${fd(v.date)} · ${esc(v.acheteur||"—")}${v.annule?" · remboursée / annulée":""}${v.compta?" · en compta le "+fd(v.compta):""}</small></div><div class="right">${eur(v.montant)}<br><span class="chip ${v.mode}">${esc(VENTE_CAT[v.categorie]||v.categorie)}</span></div></div>`).join("")}</div>`:`<div class="empty">Aucune vente ${S._vc?"dans cette catégorie ":""}en ${esc(S._va)}.</div>`}
+      <p class="note">Les commandes payées sur les boutiques « Nos livres » et « Catalogue de CD » arrivent toutes seules ; le bouton « Synchroniser HelloAsso » (Plus › Importer) rattrape celles qui manqueraient. Une commande remboursée sur HelloAsso est barrée ici et sort de la compta. Elles passent dans la bascule en compta avec les cotisations.</p>`;
+    $$("[data-v]",el).forEach(r=>r.onclick=()=>{const v=S.ventesAll.find(x=>x.id===r.dataset.v);if(v)venteFiche(v);});
+  }
+};
+function venteFiche(v){
+  openSheet(v.produit||"Vente",`<div class="card"><div class="ventil">
+    <div><span>Date</span><b>${fd(v.date)}</b></div><div><span>Catégorie</span><b>${esc(VENTE_CAT[v.categorie]||v.categorie)} (${esc(venteCompte(v))})</b></div>
+    <div><span>Montant</span><b>${eur(v.montant)}</b></div><div><span>Acheteur</span><b>${esc(v.acheteur||"—")}</b></div>
+    ${v.email?`<div><span>Mail</span><b>${esc(v.email)}</b></div>`:""}<div><span>Paiement</span><b>${esc(MODES[v.mode]||v.mode)} ${esc(v.ref||"")}</b></div>
+    <div><span>Commande</span><b>${esc(v.boutique||"")} ${esc(v.commande||"")}</b></div>${v.compta?`<div><span>En compta</span><b>${fd(v.compta)}</b></div>`:""}</div></div>
+    ${v.compta?`<p class="note">Déjà passée en compta : elle ne peut plus être modifiée ici.</p>`:`<label class="f"><span>Catégorie</span><select id="vCat">${Object.entries(VENTE_CAT).map(([k,l])=>`<option value="${k}" ${k===v.categorie?"selected":""}>${l}</option>`).join("")}</select></label>
+    <div class="btns"><button class="btn" id="vSave">Enregistrer</button><button class="btn ${v.annule?"sec":"danger"}" id="vAnn">${v.annule?"Rétablir":"Annuler la vente"}</button></div>`}`,q=>{
+    const s=$("#vSave",q);if(s)s.onclick=async()=>{if(await upd("ventes/"+v.id,{categorie:$("#vCat",q).value},true)){toast("Enregistré");closeSheet();}};
+    const a=$("#vAnn",q);if(a)a.onclick=async()=>{if(!v.annule&&!await confirmBox("Annuler cette vente ? Elle restera visible, barrée, et ne passera pas en compta.","Annuler la vente"))return;if(await upd("ventes/"+v.id,{annule:!v.annule},true)){toast(v.annule?"Vente rétablie":"Vente annulée");closeSheet();}};
+  });
+}
 VIEWS.compta={
   shell:()=>`<a class="back" href="#plus">‹ Plus</a>${intro("Des comptes clairs","Bascule en compta","Exporter les encaissements en écritures pour votre logiciel comptable.")}
     <div class="two"><select id="cs" aria-label="Saison"></select><select id="cf" aria-label="Filtre"><option value="new">Non basculés</option><option value="all">Tous</option></select></div><div id="cc"></div>`,
@@ -619,23 +657,26 @@ VIEWS.compta={
     const c=cfg(),ss=seasons();if(!S._cs||!ss.includes(S._cs))S._cs=String(c.saison);
     $("#cs").innerHTML=ss.map(s=>`<option ${s===S._cs?"selected":""}>${esc(s)}</option>`).join("");$("#cf").value=S._cf||"new";
     const L=S.paiements.filter(p=>String(p.saison)===S._cs&&((S._cf||"new")==="all"||!p.compta)).sort((a,b)=>(a.date||"").localeCompare(b.date||""));
+    const V=ventesAnnee(S._cs).filter(v=>!v.annule&&((S._cf||"new")==="all"||!v.compta)).sort((a,b)=>(a.date||"").localeCompare(b.date||""));
+    const TV=k=>V.filter(v=>v.categorie===k).reduce((s,v)=>s+v.montant,0),totV=V.reduce((s,v)=>s+v.montant,0);
     const by=Object.keys(MODES).map(k=>[k,L.filter(p=>p.mode===k)]).filter(x=>x[1].length);
     const T=L.reduce((t,p)=>{const v=ventil(p);t.tot+=v.total;t.cot+=v.cotis;t.sur+=v.surplus;t.fr+=fraisDe(p);return t;},{tot:0,cot:0,sur:0,fr:0});
-    $("#cc").innerHTML=L.length?`
+    $("#cc").innerHTML=L.length||V.length?`
       <div class="card"><div class="ventil">
         <div><span>Cotisations (${esc(c.comptes.cotis)})</span><b>${eur(T.cot)}</b></div>
         <div><span>${esc(c.libSurplus)} (${esc(c.comptes.surplus)})</span><b>${eur(T.sur)}</b></div>
         ${T.fr>0?`<div><span>Frais SumUp estimés (${esc(c.comptes.frais)})</span><b>− ${eur(T.fr)}</b></div>`:""}
-        <div><span><b>Total encaissé</b></span><b>${eur(T.tot)}</b></div></div></div>
-      <div class="list">${by.map(([k,P])=>`<div class="row" style="cursor:default"><div class="main"><b>${MODES[k]}</b><small>${P.length} encaissement${P.length>1?"s":""} · compte ${esc(c.comptes[k])}</small></div><div class="right"><b>${eur(P.reduce((s,p)=>s+num(p.montant),0))}</b></div></div>`).join("")}</div>
+        ${Object.entries(VENTE_CAT).filter(([k])=>TV(k)>0).map(([k,l])=>`<div><span>${({livres:"Ventes de livres",cd:"Ventes de CD",dons:"Dons (boutiques)"})[k]||"Autres ventes"} (${esc(venteCompte({categorie:k}))})</span><b>${eur(TV(k))}</b></div>`).join("")}
+        <div><span><b>Total encaissé</b></span><b>${eur(T.tot+totV)}</b></div></div></div>
+      <div class="list">${by.map(([k,P])=>[k,[...P,...V.filter(v=>v.mode===k).map(v=>({montant:v.montant}))]]).concat(Object.keys(MODES).filter(k=>!by.some(b=>b[0]===k)&&V.some(v=>v.mode===k)).map(k=>[k,V.filter(v=>v.mode===k).map(v=>({montant:v.montant}))])).map(([k,P])=>`<div class="row" style="cursor:default"><div class="main"><b>${MODES[k]}</b><small>${P.length} opération${P.length>1?"s":""} · compte ${esc(c.comptes[k])}</small></div><div class="right"><b>${eur(P.reduce((s,p)=>s+num(p.montant),0))}</b></div></div>`).join("")}</div>
       <button class="btn gold full" id="expC">Exporter le journal (CSV)</button>
       <p class="note">Par encaissement : débit du compte de trésorerie, crédit de la cotisation (jusqu'à ${eurTxt(c.montant)}) et du compte « ${esc(c.libSurplus)} » pour le surplus. Pour SumUp, la commission estimée (${esc(String(c.fraisSumup).replace(".",","))} %) passe en frais bancaires : vérifiez-la sur vos relevés. Journal « CA » pour la caisse, « BQ » pour le reste.</p>`
       :`<div class="empty">Rien à basculer pour cette saison.</div>`;
-    const b=$("#expC");if(b)b.onclick=()=>exportCompta(L);
+    const b=$("#expC");if(b)b.onclick=()=>exportCompta(L,V);
   }
 };
 function csvCell(v){v=String(v??"");if(/^[=+@\-]/.test(v)&&!/^-?\d/.test(v))v="'"+v;return /[;"\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;}
-async function exportCompta(L){
+async function exportCompta(L,V=[]){
   const c=cfg(),dec=n=>n?r2(n).toFixed(2).replace(".",","):"";
   const rows=[["Journal","Date","Compte","Piece","Libelle","Debit","Credit","Mode","Reference"]];
   L.forEach((p,i)=>{
@@ -647,11 +688,26 @@ async function exportCompta(L){
     rows.push([...base,c.comptes.cotis,piece,`Cotisation ${p.saison} ${nom}`,"",dec(v.cotis),...tail]);
     if(v.surplus>0)rows.push([...base,c.comptes.surplus,piece,`${c.libSurplus} ${nom}`,"",dec(v.surplus),...tail]);
   });
+  V.forEach((v,i)=>{
+    const j=v.mode==="especes"?"CA":"BQ",piece=`VTE-${(v.date||"").replace(/-/g,"")}-${String(i+1).padStart(3,"0")}`;
+    const lib=`${({livres:"Vente livre",cd:"Vente CD",dons:"Don"})[v.categorie]||"Vente"} ${/^dons?$/i.test(v.produit||"")?"":v.produit||""} ${v.acheteur||""}`.replace(/\s+/g," ").trim();
+    const base=[j,fd(v.date)],tail=[MODES[v.mode]||v.mode,[v.ref,v.commande].filter(Boolean).join(" / ")];
+    rows.push([...base,c.comptes[v.mode]||c.comptes.virement,piece,lib,dec(v.montant),"",...tail]);
+    rows.push([...base,venteCompte(v),piece,lib,"",dec(v.montant),...tail]);
+  });
   const csv="﻿"+rows.map(r=>r.map(csvCell).join(";")).join("\r\n");
-  if(!await saveFile(`compta-cotisations-${S._cs}-${today()}.csv`,csv))return;
+  if(!await saveFile(`compta-${S._cs}-${today()}.csv`,csv))return;
+  const todoV=V.filter(v=>!v.compta);
   const todo=L.filter(p=>!p.compta);
-  if(todo.length&&await confirmBox(`Marquer ces ${todo.length} encaissement${todo.length>1?"s":""} comme basculés en compta ? Ils ne pourront plus être supprimés et n'apparaîtront plus dans les prochains exports « non basculés ».`,"Marquer",false)){
-    try{await chk(S.sb.from("paiements").update({compta:today()}).in("id",todo.map(p=>p.id)));toast("Bascule enregistrée");reload();}catch(e){toast("Marquage impossible : "+errMsg(e));}
+  if(todoV.length&&!todo.length){
+    if(await confirmBox(`Marquer ces ${todoV.length} vente${todoV.length>1?"s":""} comme basculée${todoV.length>1?"s":""} en compta ? Elles n'apparaîtront plus dans les prochains exports « non basculés ».`,"Marquer",false)){
+      try{await chk(S.sb.from("ventes").update({compta:today()}).in("id",todoV.map(v=>v.id)));toast("Bascule enregistrée");reload();}catch(e){toast("Marquage impossible : "+errMsg(e));}}
+    return;
+  }
+  if(todo.length&&await confirmBox(`Marquer ces ${todo.length} encaissement${todo.length>1?"s":""}${todoV.length?` et ${todoV.length} vente${todoV.length>1?"s":""}`:""} comme basculés en compta ? Ils ne pourront plus être supprimés et n'apparaîtront plus dans les prochains exports « non basculés ».`,"Marquer",false)){
+    try{await chk(S.sb.from("paiements").update({compta:today()}).in("id",todo.map(p=>p.id)));
+      if(todoV.length)await chk(S.sb.from("ventes").update({compta:today()}).in("id",todoV.map(v=>v.id)));
+      toast("Bascule enregistrée");reload();}catch(e){toast("Marquage impossible : "+errMsg(e));}
   }
 }
 async function exportMembres(){
@@ -722,11 +778,11 @@ async function haLive(){
   el.innerHTML=`<div class="card"><p class="note" style="margin:0">Vérification de la liaison HelloAsso…</p></div>`;
   let e;try{e=await haAppel({action:"etat"});}catch(err){el.innerHTML=`<div class="banner">HelloAsso en direct : ${esc(err.message)}</div>`;return;}
   if(!e.pret){el.innerHTML="";return;}
-  el.innerHTML=`<div class="card"><b>HelloAsso en direct</b><p class="note" style="margin:4px 0 10px">Les cotisations payées sur HelloAsso arrivent toutes seules (formulaires : ${esc((e.formulaires||[]).join(", ")||"aucun")}). Ce bouton rattrape celles qui auraient manqué, sans créer de doublon.</p>
+  el.innerHTML=`<div class="card"><b>HelloAsso en direct</b><p class="note" style="margin:4px 0 10px">Les cotisations (${esc((e.formulaires||[]).join(", ")||"aucun formulaire")}) et les ventes des boutiques (${esc((e.boutiques||[]).join(", ")||"aucune")}) arrivent toutes seules. Ce bouton rattrape celles qui auraient manqué, sans créer de doublon.</p>
     <button class="btn gold full" id="haSync">Synchroniser HelloAsso</button><p class="note" id="haRes" style="margin:8px 0 0"></p></div><h3>Ou importer un fichier</h3>`;
   $("#haSync",el).onclick=async()=>{const b=$("#haSync",el);b.disabled=true;$("#haRes",el).textContent="Synchronisation en cours…";
     try{const r=await haAppel({action:"synchroniser"});reload();
-      $("#haRes",el).textContent=`${r.nouveaux} nouveau${r.nouveaux>1?"x":""} paiement${r.nouveaux>1?"s":""} · ${r.deja} déjà présent${r.deja>1?"s":""}${r.membresCrees?` · ${r.membresCrees} fiche${r.membresCrees>1?"s":""} créée${r.membresCrees>1?"s":""}`:""}${r.anterieurs?` · ${r.anterieurs} antérieur${r.anterieurs>1?"s":""} au 25/11/2026, ignoré${r.anterieurs>1?"s":""}`:""}${r.ignores?` · ${r.ignores} ignoré${r.ignores>1?"s":""} (non payé ou remboursé)`:""}.${(r.aRattacher||[]).length?` À rattacher à la main (plusieurs fiches portent ce nom, importez le fichier HelloAsso pour choisir) : ${r.aRattacher.join(" ; ")}.`:""}`;}
+      $("#haRes",el).textContent=`${r.nouveaux} nouveau${r.nouveaux>1?"x":""} paiement${r.nouveaux>1?"s":""} · ${r.deja} déjà présent${r.deja>1?"s":""}${r.membresCrees?` · ${r.membresCrees} fiche${r.membresCrees>1?"s":""} créée${r.membresCrees>1?"s":""}`:""}${r.ventes||r.ventesDeja?` · ventes : ${r.ventes} nouvelle${r.ventes>1?"s":""}, ${r.ventesDeja} déjà présente${r.ventesDeja>1?"s":""}`:""}${r.ventesAnnulees?` · ${r.ventesAnnulees} vente${r.ventesAnnulees>1?"s":""} remboursée${r.ventesAnnulees>1?"s":""}`:""}${r.anterieurs?` · ${r.anterieurs} paiement${r.anterieurs>1?"s":""} trop ancien${r.anterieurs>1?"s":""}, ignoré${r.anterieurs>1?"s":""}`:""}${r.ignores?` · ${r.ignores} ignoré${r.ignores>1?"s":""} (non payé ou remboursé)`:""}.${(r.aRattacher||[]).length?` À rattacher à la main (plusieurs fiches portent ce nom, importez le fichier HelloAsso pour choisir) : ${r.aRattacher.join(" ; ")}.`:""}`;}
     catch(err){$("#haRes",el).textContent="Synchronisation impossible : "+err.message;}
     b.disabled=false;};
 }
@@ -847,7 +903,7 @@ VIEWS.reglages={
       ${F("libSurplus","Nom du surplus versé au-delà de la cotisation")}<p class="note">Un versement de 15 € donne 10 € de cotisation et 5 € de surplus. En comptabilité associative, un tel versement volontaire est souvent un don (compte 754) : à confirmer avec le trésorier.</p></div>
     <h3>Prélèvements SEPA</h3><div class="card">${F("ics","Identifiant créancier SEPA (ICS)","text","FR12ZZZ123456")}${F("ibanAsso","IBAN de l'association")}${F("bicAsso","BIC de l'association")}${F("prochainPrelevement","Prochain prélèvement","date")}<p class="note">L'ICS se demande à votre banque. Sans lui la banque refuse les prélèvements.</p></div>
     <h3>SumUp</h3><div class="card">${F("fraisSumup","Commission SumUp (%)","number")}<p class="note">Sert à estimer les frais bancaires dans l'export compta.</p></div>
-    <h3>Comptes comptables</h3><div class="card"><div class="two">${[["cotis","Cotisations (crédit)"],["surplus","Surplus (crédit)"],["frais","Frais bancaires"],...Object.entries(MODES)].map(([k,l])=>`<label class="f"><span>${l}</span><input data-cpt="${k}" value="${esc(c.comptes[k])}"></label>`).join("")}</div></div>
+    <h3>Comptes comptables</h3><div class="card"><div class="two">${[["cotis","Cotisations (crédit)"],["surplus","Surplus et dons (crédit)"],["livres","Ventes de livres (crédit)"],["cd","Ventes de CD (crédit)"],["frais","Frais bancaires"],...Object.entries(MODES)].map(([k,l])=>`<label class="f"><span>${l}</span><input data-cpt="${k}" value="${esc(c.comptes[k])}"></label>`).join("")}</div></div>
     <h3>Modèles de mails</h3><div class="card"><p class="note">Variables : {prenom} {nom} {saison} {montant} {date} {rum} {asso}</p><label class="f"><span>Relance de cotisation</span><textarea id="c_msgRelance" style="min-height:180px">${esc(c.msgRelance)}</textarea></label><label class="f"><span>Pré-notification de prélèvement</span><textarea id="c_msgPrenotif" style="min-height:180px">${esc(c.msgPrenotif)}</textarea></label></div>
     <button class="btn gold full" id="cSave">Enregistrer les réglages</button>`;},
   bind(){
@@ -1240,6 +1296,7 @@ async function loadAll(){
     S.paiementsAll=pa.data.map(p=>({...p,montant:num(p.montant),cotis:p.cotis==null?null:num(p.cotis)}));S.paiements=S.paiementsAll.filter(p=>!p.annule);
     S.evenements=ev.data;S.inscriptions=ins.data;S.offline=false;
     if(S.isAdmin){const ca=await S.sb.from("cartes").select("*");S.cartes=ca.error?null:ca.data;}else S.cartes=null;
+    if(S.isAdmin){const ve=await S.sb.from("ventes").select("*");S.ventesAll=ve.error?null:ve.data.map(v=>({...v,montant:num(v.montant)}));}else S.ventesAll=null;
   }catch(e){S.offline=true;console.error(e);}
   refresh();
 }
