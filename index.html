@@ -2586,6 +2586,36 @@ async function carteTelecharger(liste){
   try{toast("Préparation du PDF…");const doc=await cartePdf(liste.map(carteDonnees));await saveFile(carteNomFichier(liste),doc.output("blob"));}
   catch(e){toast(e.message);}
 }
+// Envoi automatique (fonction « cartes » + Brevo) : disponible une fois la clé Brevo installée.
+async function carteMailPret(){
+  if(S.carteMailPret!==undefined)return S.carteMailPret;
+  try{const {data,error}=await S.sb.functions.invoke("cartes",{body:{action:"etat"}});S.carteMailPret=!error&&!!(data&&data.pret);}catch(e){S.carteMailPret=false;}
+  return S.carteMailPret;
+}
+async function carteEnvoyerAuto(c,essai=false){
+  const doc=await cartePdf([carteDonnees(c)]);
+  const pdf=doc.output("datauristring").split(",")[1];
+  const {data,error}=await S.sb.functions.invoke("cartes",{body:{id:c.id,pdf,essai}});
+  if(error){let m=error.message;try{const j=await error.context.json();if(j&&j.error)m=j.error;}catch(e){}throw new Error(m);}
+  if(data&&data.error)throw new Error(data.error);
+  return data;
+}
+async function carteEnvoyerLot(liste,essai=false){
+  const avec=essai?liste.slice(0,1):liste.filter(c=>mails((membre(c.membreId)||{}).email).length);
+  const sans=liste.length-avec.length;
+  if(!avec.length)return toast("Aucune de ces fiches n'a d'adresse mail");
+  const contact=mails(cfg().emailContact)[0]||"l'adresse de l'Amicale";
+  const msg=essai?`Envoyer un essai de la carte de ${fullName(membre(avec[0].membreId))} à ${contact} ? L'adhérent ne reçoit rien.`
+    :`Envoyer ${avec.length} carte${avec.length>1?"s":""} par mail, avec ${contact} en copie ?${sans?` ${sans} fiche${sans>1?"s":""} sans adresse mail ser${sans>1?"ont":"a"} ignorée${sans>1?"s":""}.`:""}`;
+  if(!await confirmBox(msg,"Envoyer",false))return;
+  let ok=0,ko=0,dernier="";
+  for(const c of avec){
+    toast(`Envoi ${ok+ko+1} / ${avec.length}…`);
+    try{await carteEnvoyerAuto(c,essai);ok++;}catch(e){ko++;dernier=e.message;}
+  }
+  reload();
+  toast(essai?(ko?"Essai impossible : "+dernier:`Essai envoyé à ${contact}`):(ko?`${ok} envoyée${ok>1?"s":""}, ${ko} en erreur : ${dernier}`:`${ok} carte${ok>1?"s":""} envoyée${ok>1?"s":""}`));
+}
 async function carteStatut(ids,statut,extra={}){
   const {error}=await S.sb.from("cartes").update({statut,...extra}).in("id",ids);
   if(error){toast("Impossible : "+error.message);return false;}
@@ -2620,14 +2650,14 @@ function carteFicheHtml(mid){
 function carteFicheBind(p,mid){
   const c=carteDe(mid);if(!c)return;
   const a=$("#cPdf",p);if(a)a.onclick=()=>carteTelecharger([c]);
-  const b=$("#cMail",p);if(b)b.onclick=()=>carteEnvoyerManuel(c);
+  const b=$("#cMail",p);if(b)b.onclick=async()=>{b.disabled=true;try{if(await carteMailPret())await carteEnvoyerLot([c]);else await carteEnvoyerManuel(c);}finally{b.disabled=false;}};
   const r=$("#cRem",p);if(r)r.onclick=async()=>{if(await carteStatut([c.id],"remise"))toast("Carte marquée remise");};
 }
 SUBVIEWS.push("cartes");
 let carteFiltre="a_envoyer";const carteSel=new Set();
 VIEWS.cartes={
   shell:()=>`<a class="back" href="#plus">‹ Plus</a>${intro("Les adhérents","Cartes d'adhérent","Une carte par cotisation encaissée, avec un QR code de vérification.")}<div id="cBody"></div>`,
-  bind(){VIEWS.cartes.update();},
+  bind(){VIEWS.cartes.update();if(S.carteMailPret===undefined)carteMailPret().then(()=>VIEWS.cartes.update());},
   update(){
     const el=$("#cBody");if(!el)return;
     if(!S.cartes){el.innerHTML=`<div class="banner">Les cartes ne sont pas encore activées dans la base de données.</div>`;return;}
@@ -2640,7 +2670,7 @@ VIEWS.cartes={
       ${L.length?`<label class="check" style="margin:12px 0 6px"><input type="checkbox" id="cAll" ${carteSel.size===L.length?"checked":""}> Tout sélectionner</label>
       <div class="list">${L.map(({c,m})=>{const [lib,cl]=CARTE_STATUTS[c.statut]||[c.statut,""];return`<div class="row" data-c="${esc(c.id)}"><input type="checkbox" data-cs="${esc(c.id)}" ${carteSel.has(c.id)?"checked":""}><div class="main"><b>${esc(fullName(m))}</b><small>N° ${esc(c.numero)}${mails(m.email).length?" · "+esc(mails(m.email)[0]):" · pas de mail"}${c.statut==="envoyee"&&c.envoyee?" · le "+new Date(c.envoyee).toLocaleDateString("fr-FR"):""}${c.erreur?" · "+esc(c.erreur):""}</small></div><div class="right"><span class="chip ${cl}">${esc(lib)}</span></div></div>`;}).join("")}</div>
       ${carteFiltre==="annulee"?"":`<div class="btns" style="margin-top:12px"><button class="btn gold" id="cImp">Imprimer${carteSel.size?` (${carteSel.size})`:""}</button><button class="btn sec" id="cRem2">Marquer remises</button></div>
-      ${carteFiltre==="a_envoyer"?`<button class="btn sec full" id="cEnv">Marquer envoyées</button>`:""}`}`
+      ${carteFiltre==="a_envoyer"||carteFiltre==="envoyee"?(S.carteMailPret?`<button class="btn gold full" id="cMailL">${carteFiltre==="envoyee"?"Renvoyer par mail":"Envoyer par mail"}${carteSel.size?` (${carteSel.size})`:""}</button><button class="btn sec full" id="cEssai" style="margin-top:8px">Envoyer un essai à l'Amicale</button>`:(carteFiltre==="a_envoyer"?`<button class="btn sec full" id="cEnv">Marquer envoyées</button>`:"")):""}`}`
       :`<div class="empty">${carteFiltre==="a_envoyer"?"Aucune carte en attente.":"Aucune carte ici."}</div>`}
       <p class="note">Les cartes se créent toutes seules à chaque cotisation encaissée et s'annulent si la cotisation est annulée. Touchez un nom pour ouvrir sa fiche et envoyer sa carte par mail.</p>`;
     $$("#cSeg button").forEach(b=>b.onclick=()=>{carteFiltre=b.dataset.v;carteSel.clear();VIEWS.cartes.update();});
@@ -2650,6 +2680,8 @@ VIEWS.cartes={
     const choix=()=>carteSel.size?L.filter(x=>carteSel.has(x.c.id)).map(x=>x.c):[];
     const imp=$("#cImp",el);if(imp)imp.onclick=()=>{const l=choix();if(!l.length)return toast("Cochez les cartes à imprimer");carteTelecharger(l);};
     const rem=$("#cRem2",el);if(rem)rem.onclick=async()=>{const l=choix();if(!l.length)return toast("Cochez les cartes remises");if(await confirmBox(`Marquer ${l.length} carte${l.length>1?"s":""} comme remise${l.length>1?"s":""} en main propre ?`,"Confirmer",false))if(await carteStatut(l.map(c=>c.id),"remise")){carteSel.clear();toast("C'est noté");}};
+    const ml=$("#cMailL",el);if(ml)ml.onclick=async()=>{const l=choix();if(!l.length)return toast("Cochez les cartes à envoyer");ml.disabled=true;try{await carteEnvoyerLot(l);carteSel.clear();}finally{ml.disabled=false;}};
+    const es=$("#cEssai",el);if(es)es.onclick=async()=>{const l=choix();const c=l[0]||L[0]&&L[0].c;if(!c)return;await carteEnvoyerLot([c],true);};
     const env=$("#cEnv",el);if(env)env.onclick=async()=>{const l=choix();if(!l.length)return toast("Cochez les cartes envoyées");if(await confirmBox(`Marquer ${l.length} carte${l.length>1?"s":""} comme envoyée${l.length>1?"s":""} par mail ?`,"Confirmer",false))if(await carteStatut(l.map(c=>c.id),"envoyee",{envoyee:new Date().toISOString()})){carteSel.clear();toast("C'est noté");}};
   }
 };
