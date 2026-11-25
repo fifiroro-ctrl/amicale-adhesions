@@ -2492,7 +2492,7 @@ function carteUrlVerif(jeton){return location.origin+location.pathname+"?carte="
 let carteLogo=null;
 function carteChargerLogo(){
   if(carteLogo)return carteLogo;
-  carteLogo=new Promise(res=>{const i=new Image();i.onload=()=>res(i);i.onerror=()=>res(null);i.src="logo-amicale.png";});
+  carteLogo=new Promise(res=>{const i=new Image();i.onload=()=>res(i);i.onerror=()=>res(null);i.src="AMGPP-Logo-Web.png";});
   return carteLogo;
 }
 function carteRond(c,x,y,w,h,r){c.beginPath();c.moveTo(x+r,y);c.arcTo(x+w,y,x+w,y+h,r);c.arcTo(x+w,y+h,x,y+h,r);c.arcTo(x,y+h,x,y,r);c.arcTo(x,y,x+w,y,r);c.closePath();}
@@ -2506,7 +2506,7 @@ function carteTexte(c,txt,x,y,taille,{poids="400",couleur="#fff",max=0,align="le
   try{c.letterSpacing="0px";}catch(e){}
 }
 const CARTE_ASSO="AMICALE DE LA MUSIQUE DES GARDIENS DE LA PAIX DE PARIS";
-const CARTE_COUL={bleu:"#1b35b2",rouge:"#960a3e",or:"#a8873c",encre:"#16244a"};
+const CARTE_COUL={bleu:"#314578",rouge:"#a02237",or:"#a8873c",encre:"#16244a"};
 async function carteRecto(d){
   const W=CARTE_PX(CARTE.L),H=CARTE_PX(CARTE.H),cv=document.createElement("canvas");cv.width=W;cv.height=H;const c=cv.getContext("2d"),K=CARTE_COUL;
   c.fillStyle="#fff";c.fillRect(0,0,W,H);
@@ -2662,7 +2662,7 @@ async function carteVerifier(j){
   const ok=r&&r.trouvee&&r.valide,ic=ok?"✓":"✗",coul=ok?"var(--ok)":"var(--bad)";
   const titre=r&&r.erreur?"Vérification impossible":!r||!r.trouvee?"Carte inconnue":r.valide?"Carte valable":r.annulee?"Carte annulée":"Carte expirée";
   v.innerHTML=`<div class="card" style="max-width:420px;margin:30px auto;text-align:center;padding:26px 20px">
-    <img src="logo-amicale.png" alt="" style="width:120px;height:120px;display:block;margin:0 auto 10px">
+    <img src="AMGPP-Logo-Web.png" alt="" style="width:120px;height:120px;display:block;margin:0 auto 10px">
     <div style="width:84px;height:84px;margin:0 auto 12px;border-radius:50%;background:${coul};color:#fff;font-size:52px;line-height:84px;font-weight:700">${ic}</div>
     <h2 style="margin:0 0 6px">${titre}</h2>
     ${r&&r.trouvee?`<p style="font-size:20px;margin:14px 0 4px"><b>${esc(r.prenom||"")} ${esc((r.nom||"").toUpperCase())}</b></p><p class="note" style="margin:0">Carte n° ${esc(r.numero)} · saison ${esc(r.saison)}</p>`:`<p class="note">${r&&r.erreur?"Vérifiez la connexion internet puis réessayez.":"Ce QR code ne correspond à aucune carte d'adhérent."}</p>`}
