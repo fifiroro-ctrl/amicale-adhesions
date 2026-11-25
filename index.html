@@ -697,17 +697,39 @@ VIEWS.sauvegarde={
 /* ----- Import HelloAsso / SumUp ----- */
 VIEWS.import={
   shell:()=>`<a class="back" href="#plus">‹ Plus</a>${intro("Les paiements en ligne","Importer HelloAsso / SumUp","Déposez l'export : les paiements sont rattachés aux fiches.")}
+    <div id="haLive"></div>
     <div class="seg" id="src"><button data-v="helloasso" class="on">HelloAsso</button><button data-v="sumup">SumUp</button><button data-v="virement">Autre (virement)</button></div>
     <label class="drop" id="imDrop" style="margin-top:12px"><input type="file" id="imFile" accept=".csv,.xlsx,.xls,text/csv,text/plain,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden>Glissez l'export (Excel ou CSV) ici ou touchez pour le choisir</label>
     <p class="note">HelloAsso : Administration › Paiements (ou la campagne d'adhésion) › Exporter. SumUp : Ventes › Mes rapports › Rapport des transactions. Nom, prénom, e-mail, montant, date, référence, campagne et statut sont reconnus. Pour SumUp, le nom peut aussi être lu dans la description de la vente.</p>
     <div id="imPrev"></div>`,
   bind(){
+    haLive();
     S._src="helloasso";S._imp=null;
     $$("#src button").forEach(b=>b.onclick=()=>{S._src=b.dataset.v;$$("#src button").forEach(x=>x.classList.toggle("on",x===b));if(S._imp)renderImport();});
     dropZone($("#imDrop"),$("#imFile"),async f=>{try{S._imp=analyseRows(await readTable(f));renderImport();}catch(e){toast("Fichier illisible : "+e.message);}});
   },
   update(){if(S._imp)renderImport();}
 };
+// HelloAsso en direct (fonction « helloasso ») : les paiements arrivent seuls ; ce bouton rattrape ceux qui auraient manqué.
+async function haAppel(body){
+  const {data,error}=await S.sb.functions.invoke("helloasso",{body});
+  if(error){let m=error.message;try{const j=await error.context.json();if(j&&j.error)m=j.error;}catch(e){}throw new Error(m);}
+  if(data&&data.error)throw new Error(data.error);
+  return data;
+}
+async function haLive(){
+  const el=$("#haLive");if(!el||!S.isAdmin)return;
+  el.innerHTML=`<div class="card"><p class="note" style="margin:0">Vérification de la liaison HelloAsso…</p></div>`;
+  let e;try{e=await haAppel({action:"etat"});}catch(err){el.innerHTML=`<div class="banner">HelloAsso en direct : ${esc(err.message)}</div>`;return;}
+  if(!e.pret){el.innerHTML="";return;}
+  el.innerHTML=`<div class="card"><b>HelloAsso en direct</b><p class="note" style="margin:4px 0 10px">Les cotisations payées sur HelloAsso arrivent toutes seules (formulaires : ${esc((e.formulaires||[]).join(", ")||"aucun")}). Ce bouton rattrape celles qui auraient manqué, sans créer de doublon.</p>
+    <button class="btn gold full" id="haSync">Synchroniser HelloAsso</button><p class="note" id="haRes" style="margin:8px 0 0"></p></div><h3>Ou importer un fichier</h3>`;
+  $("#haSync",el).onclick=async()=>{const b=$("#haSync",el);b.disabled=true;$("#haRes",el).textContent="Synchronisation en cours…";
+    try{const r=await haAppel({action:"synchroniser"});reload();
+      $("#haRes",el).textContent=`${r.nouveaux} nouveau${r.nouveaux>1?"x":""} paiement${r.nouveaux>1?"s":""} · ${r.deja} déjà présent${r.deja>1?"s":""}${r.membresCrees?` · ${r.membresCrees} fiche${r.membresCrees>1?"s":""} créée${r.membresCrees>1?"s":""}`:""}${r.ignores?` · ${r.ignores} ignoré${r.ignores>1?"s":""} (non payé ou remboursé)`:""}.${(r.aRattacher||[]).length?` À rattacher à la main (plusieurs fiches portent ce nom, importez le fichier HelloAsso pour choisir) : ${r.aRattacher.join(" ; ")}.`:""}`;}
+    catch(err){$("#haRes",el).textContent="Synchronisation impossible : "+err.message;}
+    b.disabled=false;};
+}
 // Fichier déposé, ou fiche glissée depuis l'app Contacts (certains navigateurs la reçoivent en texte vCard et non en fichier).
 function fichierDepose(dt){
   if(!dt)return null;
