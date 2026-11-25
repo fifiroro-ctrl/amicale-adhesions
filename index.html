@@ -227,7 +227,7 @@ function intro(eb,title,sub){return `<div class="intro"><div class="eyebrow">${e
 
 /* ---------- Ecritures (Supabase) ---------- */
 const COLS={
-  membres:["id","nom","prenom","categorie","service","instrument","email","tel","actif","potentiel","montantPerso","source","derniereRelance","cree","modifie"],
+  membres:["id","nom","prenom","categorie","service","instrument","email","tel","actif","potentiel","montantPerso","source","derniereRelance","cree","modifie","aVerifier"],
   mandats:["membreId","actif","titulaire","iban","bic","rum","dateSignature","sequence","ribPath","ribNom"],
   paiements:["id","membreId","nomAffiche","saison","montant","cotis","mode","date","ref","note","recuNum","compta","encaissePar","annule","annulePar","annuleLe","annuleMotif","signalement","signalementLe","signalementTraite","remisLe","cree"],
   evenements:["id","titre","date","heure","lieu","places","description"]
@@ -350,6 +350,8 @@ VIEWS.accueil={
     if(mandatsKo)todo.push([`${mandatsKo} mandat${mandatsKo>1?"s":""} de prélèvement incomplet${mandatsKo>1?"s":""}`,"#prelevements","warn"]);
     if(nonCompta)todo.push([`${nonCompta} encaissement${nonCompta>1?"s":""} à basculer en compta`,"#compta","warn"]);
     const attente=(S.ventesAll||[]).filter(v=>v.categorie==="attente"&&!v.annule).length;
+    const aVerif=S.membres.filter(m=>m.aVerifier).length;
+    if(aVerif)todo.push([`${aVerif} nouvelle${aVerif>1?"s":""} fiche${aVerif>1?"s":""} (paiement en ligne) à vérifier`,"#enligne","warn"]);
     if(S.isAdmin&&attente)todo.push([`${attente} règlement${attente>1?"s":""} en compte d'attente à affecter`,"#ventes","warn"]);
     const sig=S.paiementsAll.filter(p=>p.signalement&&!p.signalementTraite&&!p.annule).length;
     if(sig)todo.unshift([`${sig} erreur${sig>1?"s":""} signalée${sig>1?"s":""} par les caissiers`,"#caisses","bad"]);
@@ -492,6 +494,7 @@ VIEWS.evenements={
 VIEWS.plus={
   shell:()=>!S.isAdmin?`${intro("Votre espace","Mon compte","")}${compteHtml()}`:`${intro("Votre espace","Plus","Relances, banque, comptabilité et réglages.")}<div class="list">
     ${[["relances","Relances et mails","Cotisations à régler · pré-notification des prélèvements"],
+       ["enligne","Paiement en ligne","Affiche et QR code · paiements reçus · fiches à vérifier"],
        ["cartes","Cartes d'adhérent","Imprimer · envoyer · suivre les cartes"],
        ["ventes","Ventes et compte d'attente","Livres, CD · règlements à affecter"],
        ["prelevements","Prélèvements SEPA","Préparer le fichier à déposer à la banque"],
@@ -1014,6 +1017,7 @@ function memberSheet(id){
   if(!P.rum)P.rum=`${cfg().sigle||"AMGP"}-${new Date().getFullYear()}-${uid().slice(0,6).toUpperCase()}`;
   const hist=id?S.paiements.filter(p=>p.membreId===id).sort((a,b)=>(b.date||"").localeCompare(a.date||"")):[];
   openSheet(id?fullName(m):"Nouvel adhérent",`
+    ${S.isAdmin&&m.aVerifier?`<div class="banner">${esc(m.aVerifier)} Vérifiez le nom, la catégorie et l'instrument. <a href="#" class="lnk" id="fVerif">C'est vérifié</a></div>`:""}
     <div class="card">
       <div class="two"><label class="f"><span>Prénom <i>*</i></span><input id="fPre" value="${esc(m.prenom)}" autocapitalize="words" autocomplete="given-name"></label>
       <label class="f"><span>Nom <i>*</i></span><input id="fNom" value="${esc(m.nom)}" autocapitalize="characters" autocomplete="family-name"></label></div>
@@ -1042,10 +1046,13 @@ function memberSheet(id){
     </div>`:""}
     <div class="btns"><button class="btn gold full" id="fSave">Enregistrer</button></div>
     ${id?`<h3>Cotisations</h3>${hist.length?`<div class="list">${hist.map(p=>`<div class="row" data-p="${esc(p.id)}"><div class="main"><b>${esc(p.saison)}</b><small>${fd(p.date)}${p.recuNum?" · reçu "+esc(p.recuNum):""}</small></div><div class="right">${eur(p.montant)}<br><span class="chip ${p.mode}">${MODES[p.mode]||esc(p.mode)}</span></div></div>`).join("")}</div>`:`<div class="note">Aucune cotisation enregistrée.</div>`}
+    ${!aJour(m0)?`<button class="btn gold full" id="fQr" style="margin-top:12px">Payer en ligne (QR code)</button>`:""}
     <div class="btns"><button class="btn" id="fPay">+ Encaisser</button>${m.email?`<a class="btn sec" href="${esc(mailHref(m.email))}">Mail</a>`:""}${m.tel?`<a class="btn sec" href="tel:${esc(m.tel)}">Appeler</a>`:""}</div>
     ${carteFicheHtml(id)}
     <div class="btns"><button class="btn danger" id="fDel">Supprimer la fiche</button></div>`:""}`,p=>{
     if(id)carteFicheBind(p,id);
+    const fq=$("#fQr",p);if(fq)fq.onclick=()=>enLigneQrFiche(m0);
+    const fv=$("#fVerif",p);if(fv)fv.onclick=async e=>{e.preventDefault();const {error}=await S.sb.from("membres").update({aVerifier:""}).eq("id",id);if(error)return toast("Impossible : "+errMsg(error));fv.parentNode.remove();m.aVerifier="";toast("Fiche vérifiée");reload();};
     const ML=mails(m.email);
     const drawM=()=>{$("#fMails",p).innerHTML=ML.map((e,i)=>`<span class="mchip">${esc(e)}<button type="button" data-rm="${i}" aria-label="Effacer ${esc(e)}">×</button></span>`).join("");
       $$("[data-rm]",p).forEach(b=>b.onclick=()=>{ML.splice(+b.dataset.rm,1);drawM();});};
@@ -1364,6 +1371,9 @@ async function loadAll(){
 }
 async function start(){
   const jc=carteJetonUrl();if(jc){carteVerifier(jc);return;}
+  const pq=new URLSearchParams(location.search);
+  if(pq.has("paye")){enLigneRetour(pq.get("paye"));return;}
+  if(pq.has("payer")){enLignePage(pq.get("payer"));return;}
   const {data:{session}}=await S.sb.auth.getSession();
   S.session=session;S.uid=session&&session.user.id;S.profil=null;S.isAdmin=false;
   if(session&&!S.recovery){
@@ -2841,6 +2851,170 @@ async function carteVerifier(j){
     ${r&&r.trouvee?`<p style="font-size:20px;margin:14px 0 4px"><b>${esc(r.prenom||"")} ${esc((r.nom||"").toUpperCase())}</b></p><p class="note" style="margin:0">Carte n° ${esc(r.numero)} · saison ${esc(r.saison)}</p>`:`<p class="note">${r&&r.erreur?"Vérifiez la connexion internet puis réessayez.":"Ce QR code ne correspond à aucune carte d'adhérent."}</p>`}
     <p class="note" style="margin-top:18px">Amicale de la Musique des Gardiens de la Paix de Paris</p></div>`;
 }
+
+/* ----- Paiement de la cotisation en ligne (HelloAsso ou SumUp), sans compte ----- */
+async function payerAppel(body){
+  const {data,error}=await S.sb.functions.invoke("payer",{body});
+  if(error){let m=error.message;try{const j=await error.context.json();if(j&&j.error)m=j.error;}catch(e){}throw new Error(m);}
+  if(data&&data.error)throw new Error(data.error);
+  return data;
+}
+const enLigneBase=()=>location.origin+location.pathname;
+const enLigneUrl=x=>enLigneBase()+"?payer="+encodeURIComponent(x);
+const enLigneId=s=>/^[a-f0-9]{32}$/.test(String(s||""));
+function qrCanvas(txt,taille=300,couleur="#16244a"){
+  const q=new QRCodeLib.QRCode(-1,QRCodeLib.L.M);q.addData(txt);q.make();
+  const n=q.getModuleCount(),m=Math.floor(taille/(n+4)),T=m*(n+4),cv=document.createElement("canvas");cv.width=cv.height=T;
+  const c=cv.getContext("2d");c.fillStyle="#fff";c.fillRect(0,0,T,T);c.fillStyle=couleur;
+  for(let r=0;r<n;r++)for(let k=0;k<n;k++)if(q.isDark(r,k))c.fillRect(m*(k+2),m*(r+2),m,m);
+  return cv;
+}
+function enLigneCadre(html){
+  document.body.classList.add("verif");
+  $("#view").innerHTML=`<div class="card" style="max-width:440px;margin:20px auto;padding:22px 18px">
+    <img src="AMGPP-Logo-Web.png" alt="" style="width:110px;height:110px;display:block;margin:0 auto 6px">
+    <p class="note" style="text-align:center;margin:0 0 14px">Amicale de la Musique des Gardiens de la Paix de Paris</p>${html}</div>`;
+  return $("#view");
+}
+const enLigneBoutons=f=>`${f&&f.helloasso?`<button class="btn gold full big" data-f="helloasso" style="margin-top:10px">Payer par carte avec HelloAsso</button>`:""}
+  ${f&&f.sumup?`<button class="btn full big" data-f="sumup" style="margin-top:10px">Payer par carte avec SumUp</button>`:""}
+  ${f&&f.helloasso?`<p class="note" style="margin-top:12px">Sur HelloAsso, une contribution facultative à HelloAsso vous est proposée : vous pouvez la mettre à 0 €. Elle ne revient pas à l'Amicale.</p>`:""}
+  ${!f||(!f.helloasso&&!f.sumup)?`<div class="banner">Le paiement en ligne n'est pas disponible pour le moment.</div>`:""}`;
+function enLigneLier(v,corps){
+  $$("[data-f]",v).forEach(b=>b.onclick=async()=>{
+    const x=corps();if(!x)return;
+    $$("[data-f]",v).forEach(y=>y.disabled=true);const t=b.textContent;b.textContent="Ouverture du paiement…";
+    try{const r=await payerAppel({action:"lancer",fournisseur:b.dataset.f,...x});location.href=r.url;}
+    catch(e){toast(e.message);b.textContent=t;$$("[data-f]",v).forEach(y=>y.disabled=false);}
+  });
+}
+async function enLignePage(t){
+  const v=enLigneCadre(`<p style="text-align:center">Chargement…</p>`);
+  try{
+    if(enLigneId(t)){
+      const r=await payerAppel({action:"info",id:t});
+      if(r.statut==="payee"||r.statut==="attente"||r.statut==="traitement")return enLigneRetour(t);
+      enLigneCadre(`<h2 style="margin:0 0 6px;text-align:center">Cotisation ${esc(r.saison)}</h2>
+        <p style="text-align:center;font-size:20px;margin:10px 0 2px"><b>${esc(r.prenom)} ${esc(String(r.nom||"").toUpperCase())}</b></p>
+        <p style="text-align:center;font-size:28px;font-weight:750;margin:6px 0 10px">${eurTxt(r.montant)}</p>${enLigneBoutons(r.fournisseurs)}`);
+      enLigneLier($("#view"),()=>({id:t}));
+      return;
+    }
+    const r=await payerAppel({action:"config"});
+    enLigneCadre(`<h2 style="margin:0 0 4px;text-align:center">Adhérer à l'Amicale</h2>
+      <p style="text-align:center;margin:0 0 14px">Cotisation ${esc(r.saison)} : <b>${eurTxt(r.montant)}</b></p>
+      <div class="two"><label class="f"><span>Prénom <i>*</i></span><input id="eP" autocomplete="given-name" autocapitalize="words"></label>
+      <label class="f"><span>Nom <i>*</i></span><input id="eN" autocomplete="family-name" autocapitalize="characters"></label></div>
+      <label class="f"><span>Mail (pour recevoir le reçu)</span><input id="eM" type="email" autocomplete="email" autocapitalize="off"></label>
+      <label class="f"><span>Téléphone (facultatif)</span><input id="eT" type="tel" autocomplete="tel"></label>
+      <label class="check"><input type="checkbox" id="eNv" ${t==="nouveau"?"checked":""}> C'est ma première adhésion à l'Amicale</label>
+      ${enLigneBoutons(r.fournisseurs)}
+      <p class="note" style="margin-top:12px">Vos coordonnées servent uniquement à la gestion des adhésions de l'Amicale.</p>`);
+    enLigneLier($("#view"),()=>{
+      const prenom=$("#eP").value.trim(),nom=$("#eN").value.trim(),email=$("#eM").value.trim();
+      if(!prenom||!nom){toast("Indiquez votre prénom et votre nom");return null;}
+      if(email&&!mailOk(email)){toast("Adresse mail invalide");return null;}
+      return {prenom,nom,email,tel:$("#eT").value.trim(),premiere:$("#eNv").checked};
+    });
+  }catch(e){enLigneCadre(`<h2 style="text-align:center">Paiement indisponible</h2><p class="note" style="text-align:center">${esc(e.message)}</p>`);}
+}
+async function enLigneRetour(id){
+  enLigneCadre(`<p style="text-align:center">Vérification du paiement…</p>`);
+  let r=null,err="";
+  for(let i=0;i<12;i++){
+    try{r=await payerAppel({action:"retour",id});err="";}catch(e){err=e.message;}
+    if(r&&r.statut!=="lancee"&&r.statut!=="traitement")break;
+    await new Promise(ok=>setTimeout(ok,2500));
+  }
+  if(!r){enLigneCadre(`<h2 style="text-align:center">Vérification impossible</h2><p class="note" style="text-align:center">${esc(err||"Vérifiez la connexion internet.")}</p><button class="btn full" onclick="location.reload()">Réessayer</button>`);return;}
+  const qui=`${esc(r.prenom||"")}`;
+  if(r.statut==="payee"){
+    const v=enLigneCadre(`<div style="width:72px;height:72px;margin:0 auto 10px;border-radius:50%;background:var(--ok);color:#fff;font-size:44px;line-height:72px;text-align:center;font-weight:700">✓</div>
+      <h2 style="text-align:center;margin:0 0 6px">Merci ${qui} !</h2><p style="text-align:center;margin:0 0 14px">Votre cotisation ${esc(r.saison)} est réglée.</p>
+      ${r.carte?`<p class="note" style="text-align:center">Voici votre carte d'adhérent. Gardez-la sur votre téléphone ou imprimez-la.</p><div id="eCarte" style="display:grid;gap:10px"></div>
+      <button class="btn gold full" id="ePdf" style="margin-top:12px">Télécharger ma carte (PDF)</button>`:`<p class="note" style="text-align:center">Votre carte d'adhérent vous sera remise par l'Amicale.</p>`}`);
+    if(r.carte){
+      const d={...r.carte,delivree:new Date(r.carte.cree||Date.now()).toLocaleDateString("fr-FR")};
+      try{const im=await carteImages(d);$("#eCarte",v).innerHTML=`<img src="${im.recto}" alt="Carte, recto" style="width:100%;border-radius:10px;box-shadow:0 1px 6px rgba(0,0,0,.15)"><img src="${im.verso}" alt="Carte, verso" style="width:100%;border-radius:10px;box-shadow:0 1px 6px rgba(0,0,0,.15)">`;}catch(e){}
+      $("#ePdf",v).onclick=async()=>{try{const doc=await cartePdf([d]);await saveFile(`carte-amicale-${d.saison}-${noAcc(d.nom+"-"+d.prenom).toLowerCase().replace(/[^a-z0-9]+/g,"-")}.pdf`,doc.output("blob"));}catch(e){toast(e.message);}};
+    }
+  }else if(r.statut==="attente"){
+    enLigneCadre(`<div style="width:72px;height:72px;margin:0 auto 10px;border-radius:50%;background:var(--ok);color:#fff;font-size:44px;line-height:72px;text-align:center;font-weight:700">✓</div>
+      <h2 style="text-align:center;margin:0 0 6px">Merci ${qui} !</h2><p style="text-align:center">Votre paiement est bien reçu. Le trésorier finalise votre adhésion, votre carte vous sera remise par l'Amicale.</p>`);
+  }else if(r.statut==="echec"||r.statut==="cree"){
+    enLigneCadre(`<h2 style="text-align:center">Le paiement n'a pas abouti</h2><p class="note" style="text-align:center">Aucun montant n'a été prélevé.</p><a class="btn gold full" href="${esc(enLigneUrl(id))}">Réessayer</a>`);
+  }else{
+    enLigneCadre(`<h2 style="text-align:center">Paiement en cours de confirmation</h2><p class="note" style="text-align:center">La banque n'a pas encore répondu. Patientez un instant puis touchez « Actualiser ».<br>Si vous avez abandonné le paiement, touchez « Réessayer ».</p>
+      <button class="btn gold full" onclick="location.reload()">Actualiser</button><a class="btn sec full" style="margin-top:8px" href="${esc(enLigneUrl(id))}">Réessayer</a>`);
+  }
+}
+// QR code d'une fiche, à faire scanner par l'adhérent (caissier ou administrateur).
+async function enLigneQrFiche(m){
+  let r;try{toast("Préparation du QR code…");r=await payerAppel({action:"qr",membreId:m.id});}catch(e){return toast(e.message);}
+  const url=enLigneUrl(r.id);
+  openSheet("Payer en ligne",`<div class="card" style="text-align:center"><p style="margin-top:0">Faites scanner ce QR code par <b>${esc(fullName(m))}</b> avec l'appareil photo de son téléphone.</p>
+    <div id="eQr"></div><p style="font-size:22px;font-weight:750;margin:8px 0 0">${eurTxt(r.montant)} · cotisation ${esc(r.saison)}</p>
+    <p class="note" id="eSt">En attente du paiement…</p></div>
+    <button class="btn sec full" id="eCopy">Copier le lien de paiement</button>`,q=>{
+    const cv=qrCanvas(url,320);cv.style.cssText="width:260px;max-width:100%;height:auto";$("#eQr",q).appendChild(cv);
+    $("#eCopy",q).onclick=async()=>{try{await navigator.clipboard.writeText(url);toast("Lien copié");}catch(e){toast(url);}};
+    const suivre=async()=>{
+      const st=$("#eSt",q);if(!st||!document.body.contains(st))return;
+      try{const x=await payerAppel({action:"retour",id:r.id});
+        if(x.statut==="payee"||x.statut==="attente"){st.innerHTML=`<span class="ok-t" style="font-size:18px;font-weight:700">✓ Paiement reçu${x.statut==="attente"?" (en compte d'attente)":""}</span>`;reload();return;}
+        if(x.statut==="lancee")st.textContent="Paiement en cours sur le téléphone de l'adhérent…";
+      }catch(e){}
+      setTimeout(suivre,4000);
+    };
+    setTimeout(suivre,4000);
+  });
+}
+// Affiche A4 à imprimer : logo, cotisation et QR code de la page publique.
+async function enLigneAffiche(){
+  const J=window.jspdf&&window.jspdf.jsPDF;if(!J)return toast("Module PDF non chargé : vérifiez la connexion");
+  const c=cfg(),doc=new J({unit:"mm",format:"a4"}),url=enLigneUrl("1");
+  const logo=await carteChargerLogo();
+  if(logo){const cv=document.createElement("canvas");cv.width=cv.height=600;cv.getContext("2d").drawImage(logo,0,0,600,600);doc.addImage(cv.toDataURL("image/png"),"PNG",80,14,50,50);}
+  doc.setTextColor(22,36,74);doc.setFont("helvetica","bold");doc.setFontSize(13);
+  doc.text("AMICALE DE LA MUSIQUE DES GARDIENS DE LA PAIX DE PARIS",105,74,{align:"center"});
+  doc.setFontSize(38);doc.text("Adhérez à l'Amicale",105,96,{align:"center"});
+  doc.setFont("helvetica","normal");doc.setFontSize(20);doc.setTextColor(60,60,70);
+  doc.text(`Cotisation ${c.saison} : ${String(num(c.montant)).replace(".",",")} €`,105,110,{align:"center"});
+  const q=qrCanvas(url,900);doc.addImage(q.toDataURL("image/png"),"PNG",55,120,100,100);
+  doc.setTextColor(22,36,74);doc.setFont("helvetica","bold");doc.setFontSize(18);
+  doc.text("Scannez avec l'appareil photo de votre téléphone",105,232,{align:"center"});
+  doc.setFont("helvetica","normal");doc.setFontSize(13);doc.setTextColor(80,80,90);
+  doc.text("Paiement sécurisé par carte bancaire (HelloAsso ou SumUp).",105,242,{align:"center"});
+  doc.text("Votre carte d'adhérent s'affiche aussitôt sur votre téléphone.",105,249,{align:"center"});
+  doc.setFillColor(49,69,120);doc.rect(0,272,210,8,"F");doc.setFillColor(160,34,55);doc.rect(0,280,210,17,"F");
+  doc.setFontSize(9);doc.setTextColor(255,255,255);doc.text(url,105,290,{align:"center"});
+  await saveFile(`affiche-adhesion-${c.saison}.pdf`,doc.output("blob"));
+}
+SUBVIEWS.push("enligne");
+VIEWS.enligne={
+  shell:()=>`<a class="back" href="#plus">‹ Plus</a>${intro("Les adhésions","Paiement en ligne","Les adhérents paient leur cotisation par carte sur leur téléphone : le règlement est enregistré tout seul et leur carte s'affiche aussitôt.")}<div id="eBody"></div>`,
+  bind(){
+    VIEWS.enligne.update();
+    S.sb.from("demandes_paiement").select("*").order("cree",{ascending:false}).limit(30).then(({data,error})=>{S._dem=error?null:data;VIEWS.enligne.update();});
+    payerAppel({action:"verifier"}).then(x=>{if(x&&x.enregistres){toast(`${x.enregistres} paiement${x.enregistres>1?"s":""} en ligne enregistré${x.enregistres>1?"s":""}`);reload();}}).catch(()=>{});
+  },
+  update(){
+    const el=$("#eBody");if(!el)return;
+    const url=enLigneUrl("1"),av=S.membres.filter(m=>m.aVerifier);
+    const ST={cree:["Créée",""],lancee:["En cours","warn"],traitement:["En cours","warn"],payee:["Payée","ok"],attente:["Compte d'attente","warn"],echec:["Échouée","bad"]};
+    el.innerHTML=`${av.length?`<h3>Nouvelles fiches à vérifier</h3><div class="list">${av.map(m=>`<div class="row" data-m="${esc(m.id)}"><div class="main"><b>${esc(fullName(m))}</b><small>${esc(m.aVerifier)}</small></div><div class="right">›</div></div>`).join("")}</div>`:""}
+      <h3>Page publique « Adhérer à l'Amicale »</h3>
+      <div class="card" style="text-align:center"><div id="eQr"></div><p class="note" style="word-break:break-all">${esc(url)}</p>
+      <div class="btns"><button class="btn gold" id="eAff">Imprimer l'affiche</button><button class="btn sec" id="eCopy">Copier le lien</button></div>
+      <p class="note" style="margin-bottom:0">À mettre sur une table, sur le site ou dans un message. Le QR code d'une fiche précise se trouve dans la fiche de l'adhérent.</p></div>
+      ${S._dem&&S._dem.length?`<h3>Derniers paiements en ligne</h3><div class="list">${S._dem.map(d=>{const m=membre(d.membreId),n=d.nouveau||{},[l,cl]=ST[d.statut]||[d.statut,""];
+        return`<div class="row" ${d.membreId?`data-m="${esc(d.membreId)}"`:""}><div class="main"><b>${esc(m?fullName(m):`${n.prenom||""} ${(n.nom||"").toUpperCase()}`.trim()||"—")}</b><small>${new Date(d.cree).toLocaleString("fr-FR",{dateStyle:"short",timeStyle:"short"})}${d.fournisseur?" · "+esc(MODES[d.fournisseur]||d.fournisseur):""}${n.premiere?" · première adhésion":""}</small></div><div class="right">${eur(d.montant)}<br><span class="chip ${cl}">${esc(l)}</span></div></div>`;}).join("")}</div>`:""}`;
+    const cv=qrCanvas(url,320);cv.style.cssText="width:220px;max-width:100%;height:auto";$("#eQr",el).appendChild(cv);
+    $("#eAff",el).onclick=()=>enLigneAffiche().catch(e=>toast(e.message));
+    $("#eCopy",el).onclick=async()=>{try{await navigator.clipboard.writeText(url);toast("Lien copié");}catch(e){toast(url);}};
+    $$("[data-m]",el).forEach(r=>r.onclick=()=>memberSheet(r.dataset.m));
+  }
+};
 
 (function init(){
   if(!CONFIG_OK){go();return;}
