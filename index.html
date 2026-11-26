@@ -3,12 +3,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#16244a">
 <title>Amicale — Adhésions</title>
-<link rel="manifest" href="manifest.webmanifest">
-<script>/* Page de paiement : sans manifeste, « Sur l'écran d'accueil » garde l'adresse de la page au lieu d'ouvrir la connexion. */
-if(/[?&]payer=/.test(location.search)){document.querySelector('link[rel=manifest]').remove();document.querySelector('meta[name=apple-mobile-web-app-capable]').content="no";document.title="Adhérer à l'Amicale";}</script>
+<script>/* Le manifeste (raccourci = accueil de l'appli) n'est jamais posé sur la page de paiement : « Sur l'écran d'accueil » y garde l'adresse de la page. */
+if(/[?&]payer=/.test(location.search))document.title="Adhérer à l'Amicale";
+else document.write('<meta name="apple-mobile-web-app-capable" content="yes"><link rel="manifest" href="manifest.webmanifest">');</script>
 <link rel="icon" type="image/png" href="AMGPP-Logo-Web.png">
 <link rel="apple-touch-icon" href="AMGPP-Logo-3cm.jpg?v=2">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
