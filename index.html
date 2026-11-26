@@ -123,6 +123,8 @@ table.prev select{font-size:13px;padding:6px;min-height:36px}
 .login{max-width:380px;margin:40px auto}
 .row.annule .main b{text-decoration:line-through;opacity:.6}
 .big{font-size:18px;padding:18px}
+.eOpt{border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin:6px 0}
+.eArt{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--line)}.eArt:last-child{border-bottom:0}.eArt .btn.sm{min-width:38px;padding:6px 0}.eQ{min-width:22px;text-align:center;font-weight:700}
 
 /* ---- Grand écran : menu latéral ---- */
 @media (min-width:900px){
@@ -166,10 +168,10 @@ const CATS=["BF","Hie","Retraité","Sympathisant"];
 const PREMIERE_SAISON=2026;
 function defaultSaison(){return String(new Date().getFullYear());}
 const DEF_CFG={
-  asso:"Amicale de la Musique des Gardiens de la Paix",sigle:"AMGP",adresse:"",montant:10,montantSympathisant:20,
+  asso:"Amicale de la Musique des Gardiens de la Paix",sigle:"AMGP",adresse:"",montant:10,montantSympathisant:20,portLivre:8,portCD:4,
   tresorier:"",emailContact:"",ics:"",ibanAsso:"",bicAsso:"",prochainPrelevement:"",
   libSurplus:"Surplus / dons",fraisSumup:1.75,
-  comptes:{cotis:"756000",surplus:"754100",frais:"627000",livres:"7071",cd:"7072",attente:"471000",especes:"530000",cheque:"511200",virement:"512000",prelevement:"512000",sumup:"511300",helloasso:"511400"},
+  comptes:{cotis:"756000",surplus:"754100",frais:"627000",livres:"7071",cd:"7072",port:"708500",attente:"471000",especes:"530000",cheque:"511200",virement:"512000",prelevement:"512000",sumup:"511300",helloasso:"511400"},
   msgRelance:"Bonjour {prenom},\n\nSauf erreur de notre part, votre cotisation {saison} à l'{asso} ({montant}) n'a pas encore été réglée.\n\nVous pouvez la régler en espèces lors d'une répétition, par carte (SumUp) ou en ligne via HelloAsso.\n\nMerci et à bientôt,\nLe bureau",
   msgPrenotif:"Bonjour {prenom},\n\nNous vous informons que votre cotisation {saison} d'un montant de {montant} sera prélevée le {date} sur votre compte bancaire (mandat SEPA n° {rum}).\n\nAucune démarche n'est nécessaire de votre part.\n\nCordialement,\nLe bureau de l'{asso}"
 };
@@ -622,8 +624,8 @@ async function genSepa(sel,record){
 
 /* ----- Compta ----- */
 /* ----- Ventes (livres, CD) : hors cotisations ----- */
-const VENTE_CAT={livres:"Livres",cd:"CD",dons:"Dons",autres:"Autres",attente:"Compte d'attente"};
-const venteCompte=v=>{const c=cfg().comptes;return v.categorie==="dons"?c.surplus:v.categorie==="attente"?(c.attente||"471000"):(c[v.categorie]||c.livres);};
+const VENTE_CAT={livres:"Livres",cd:"CD",port:"Frais d'envoi",dons:"Dons",autres:"Autres",attente:"Compte d'attente"};
+const venteCompte=v=>{const c=cfg().comptes;return v.categorie==="dons"?c.surplus:v.categorie==="attente"?(c.attente||"471000"):v.categorie==="port"?(c.port||"708500"):(c[v.categorie]||c.livres);};
 function ventesAnnee(an){return (S.ventesAll||[]).filter(v=>String(v.date||"").slice(0,4)===String(an));}
 SUBVIEWS.push("ventes");
 VIEWS.ventes={
@@ -686,7 +688,7 @@ VIEWS.compta={
         <div><span>Cotisations (${esc(c.comptes.cotis)})</span><b>${eur(T.cot)}</b></div>
         <div><span>${esc(c.libSurplus)} (${esc(c.comptes.surplus)})</span><b>${eur(T.sur)}</b></div>
         ${T.fr>0?`<div><span>Frais SumUp estimés (${esc(c.comptes.frais)})</span><b>− ${eur(T.fr)}</b></div>`:""}
-        ${Object.entries(VENTE_CAT).filter(([k])=>TV(k)>0).map(([k,l])=>`<div><span>${({livres:"Ventes de livres",cd:"Ventes de CD",dons:"Dons (boutiques)",attente:"Compte d'attente"})[k]||"Autres ventes"} (${esc(venteCompte({categorie:k}))})</span><b>${eur(TV(k))}</b></div>`).join("")}
+        ${Object.entries(VENTE_CAT).filter(([k])=>TV(k)>0).map(([k,l])=>`<div><span>${({livres:"Ventes de livres",cd:"Ventes de CD",port:"Frais d'envoi facturés",dons:"Dons (boutiques)",attente:"Compte d'attente"})[k]||"Autres ventes"} (${esc(venteCompte({categorie:k}))})</span><b>${eur(TV(k))}</b></div>`).join("")}
         <div><span><b>Total encaissé</b></span><b>${eur(T.tot+totV)}</b></div></div></div>
       <div class="list">${by.map(([k,P])=>[k,[...P,...V.filter(v=>v.mode===k).map(v=>({montant:v.montant}))]]).concat(Object.keys(MODES).filter(k=>!by.some(b=>b[0]===k)&&V.some(v=>v.mode===k)).map(k=>[k,V.filter(v=>v.mode===k).map(v=>({montant:v.montant}))])).map(([k,P])=>`<div class="row" style="cursor:default"><div class="main"><b>${MODES[k]}</b><small>${P.length} opération${P.length>1?"s":""} · compte ${esc(c.comptes[k])}</small></div><div class="right"><b>${eur(P.reduce((s,p)=>s+num(p.montant),0))}</b></div></div>`).join("")}</div>
       <button class="btn gold full" id="expC">Exporter le journal (CSV)</button>
@@ -710,7 +712,7 @@ async function exportCompta(L,V=[]){
   });
   V.forEach((v,i)=>{
     const j=v.mode==="especes"?"CA":"BQ",piece=`VTE-${(v.date||"").replace(/-/g,"")}-${String(i+1).padStart(3,"0")}`;
-    const lib=`${({livres:"Vente livre",cd:"Vente CD",dons:"Don",attente:"Règlement à affecter"})[v.categorie]||"Vente"} ${/^dons?$/i.test(v.produit||"")?"":v.produit||""} ${v.acheteur||""}`.replace(/\s+/g," ").trim();
+    const lib=`${({livres:"Vente livre",cd:"Vente CD",port:"Frais d'envoi",dons:"Don",attente:"Règlement à affecter"})[v.categorie]||"Vente"} ${/^dons?$/i.test(v.produit||"")?"":v.produit||""} ${v.acheteur||""}`.replace(/\s+/g," ").trim();
     const base=[j,fd(v.date)],tail=[MODES[v.mode]||v.mode,[v.ref,v.commande].filter(Boolean).join(" / ")];
     rows.push([...base,c.comptes[v.mode]||c.comptes.virement,piece,lib,dec(v.montant),"",...tail]);
     rows.push([...base,venteCompte(v),piece,lib,"",dec(v.montant),...tail]);
@@ -966,11 +968,11 @@ VIEWS.reglages={
   shell:()=>{const c=cfg();const F=(k,l,t="text",ph="")=>`<label class="f"><span>${l}</span><input id="c_${k}" type="${t}" value="${esc(c[k])}" placeholder="${esc(ph)}"></label>`;
     return`<a class="back" href="#plus">‹ Plus</a>${intro("Votre espace","Réglages","Les fondations de l'appli.")}<div id="ban"></div>
     <h3>Association</h3><div class="card">${F("asso","Nom")}${F("sigle","Sigle (objet des mails, références)")}<label class="f"><span>Adresse (figure sur les reçus)</span><textarea id="c_adresse" style="min-height:70px">${esc(c.adresse)}</textarea></label>${F("tresorier","Signataire des reçus (trésorier)")}${F("emailContact","Mail du bureau","email")}</div>
-    <h3>Cotisation</h3><div class="card"><div class="two"><label class="f"><span>Saison (vide = année en cours)</span><input id="c_saison" value="${esc((S.config&&S.config.saison)||"")}" placeholder="${defaultSaison()}" inputmode="numeric"></label>${F("montant","Cotisation minimale actifs et retraités (€)","number")}</div>${F("montantSympathisant","Cotisation minimale sympathisants (€)","number")}
+    <h3>Cotisation</h3><div class="card"><div class="two"><label class="f"><span>Saison (vide = année en cours)</span><input id="c_saison" value="${esc((S.config&&S.config.saison)||"")}" placeholder="${defaultSaison()}" inputmode="numeric"></label>${F("montant","Cotisation minimale actifs et retraités (€)","number")}</div>${F("montantSympathisant","Cotisation minimale sympathisants (€)","number")}<div class="two">${F("portLivre","Envoi postal : port par livre (€)","number")}${F("portCD","Envoi postal : port par CD (€)","number")}</div>
       ${F("libSurplus","Nom du surplus versé au-delà de la cotisation")}<p class="note">Un versement au-delà du minimum est compté en surplus : par exemple 15 € versés par un actif donnent 10 € de cotisation et 5 € de surplus. En comptabilité associative, un tel versement volontaire est souvent un don (compte 754) : à confirmer avec le trésorier.</p></div>
     <h3>Prélèvements SEPA</h3><div class="card">${F("ics","Identifiant créancier SEPA (ICS)","text","FR12ZZZ123456")}${F("ibanAsso","IBAN de l'association")}${F("bicAsso","BIC de l'association")}${F("prochainPrelevement","Prochain prélèvement","date")}<p class="note">L'ICS se demande à votre banque. Sans lui la banque refuse les prélèvements.</p></div>
     <h3>SumUp</h3><div class="card">${F("fraisSumup","Commission SumUp (%)","number")}<p class="note">Sert à estimer les frais bancaires dans l'export compta.</p></div>
-    <h3>Comptes comptables</h3><div class="card"><div class="two">${[["cotis","Cotisations (crédit)"],["surplus","Surplus et dons (crédit)"],["livres","Ventes de livres (crédit)"],["cd","Ventes de CD (crédit)"],["attente","Compte d'attente (crédit)"],["frais","Frais bancaires"],...Object.entries(MODES)].map(([k,l])=>`<label class="f"><span>${l}</span><input data-cpt="${k}" value="${esc(c.comptes[k])}"></label>`).join("")}</div></div>
+    <h3>Comptes comptables</h3><div class="card"><div class="two">${[["cotis","Cotisations (crédit)"],["surplus","Surplus et dons (crédit)"],["livres","Ventes de livres (crédit)"],["cd","Ventes de CD (crédit)"],["port","Frais d'envoi facturés (crédit)"],["attente","Compte d'attente (crédit)"],["frais","Frais bancaires"],...Object.entries(MODES)].map(([k,l])=>`<label class="f"><span>${l}</span><input data-cpt="${k}" value="${esc(c.comptes[k])}"></label>`).join("")}</div></div>
     <h3>Modèles de mails</h3><div class="card"><p class="note">Variables : {prenom} {nom} {saison} {montant} {date} {rum} {asso}</p><label class="f"><span>Relance de cotisation</span><textarea id="c_msgRelance" style="min-height:180px">${esc(c.msgRelance)}</textarea></label><label class="f"><span>Pré-notification de prélèvement</span><textarea id="c_msgPrenotif" style="min-height:180px">${esc(c.msgPrenotif)}</textarea></label></div>
     <button class="btn gold full" id="cSave">Enregistrer les réglages</button>`;},
   bind(){
@@ -978,7 +980,7 @@ VIEWS.reglages={
     $("#cSave").onclick=async()=>{
       const v=k=>$("#c_"+k).value.trim();
       const d={};["asso","sigle","adresse","tresorier","emailContact","saison","ics","bicAsso","prochainPrelevement","msgRelance","msgPrenotif","libSurplus"].forEach(k=>d[k]=v(k));
-      d.montant=num(v("montant"));d.montantSympathisant=num(v("montantSympathisant"))||20;d.fraisSumup=num(v("fraisSumup"));d.ibanAsso=ibanClean(v("ibanAsso"));d.bicAsso=d.bicAsso.toUpperCase().replace(/\s/g,"");
+      d.montant=num(v("montant"));d.montantSympathisant=num(v("montantSympathisant"))||20;d.portLivre=num(v("portLivre"));d.portCD=num(v("portCD"));d.fraisSumup=num(v("fraisSumup"));d.ibanAsso=ibanClean(v("ibanAsso"));d.bicAsso=d.bicAsso.toUpperCase().replace(/\s/g,"");
       if(d.montant<=0)return toast("Montant de cotisation invalide");
       if(d.ibanAsso&&!ibanOk(d.ibanAsso))return toast("L'IBAN de l'association n'est pas valide");
       if(!bicOk(d.bicAsso))return toast("Le BIC n'est pas valide");
@@ -2882,43 +2884,87 @@ const enLigneBoutons=f=>`${f&&f.helloasso?`<button class="btn gold full big" dat
   ${f&&f.sumup?`<button class="btn full big" data-f="sumup" style="margin-top:10px">Payer par carte avec SumUp</button>`:""}
   ${f&&f.helloasso?`<p class="note" style="margin-top:12px">Sur HelloAsso, une contribution facultative à HelloAsso vous est proposée : vous pouvez la mettre à 0 €. Elle ne revient pas à l'Amicale.</p>`:""}
   ${!f||(!f.helloasso&&!f.sumup)?`<div class="banner">Le paiement en ligne n'est pas disponible pour le moment.</div>`:""}`;
-// Choix 2026, 2027 ou les deux (selon ce qui reste à régler).
-function enLigneChoix(choix,unitaire){
-  if(!choix||!choix.length)return"";
-  if(choix.length===1)return`<input type="hidden" name="eSa" value="${esc(choix[0])}"><p style="text-align:center;margin:0 0 6px">Cotisation ${esc(choix[0])}</p><p style="text-align:center;font-size:28px;font-weight:750;margin:0 0 10px" data-n="1">${eurTxt(unitaire)}</p>`;
-  const opts=[...choix.map(x=>[[x],`Cotisation ${x}`]),[choix,`${choix.join(" et ")}`]];
-  return`<div class="f"><span>Je règle</span>${opts.map(([L,l],i)=>`<label class="check" style="border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin:6px 0"><input type="radio" name="eSa" value="${esc(L.join(","))}" ${i===0?"checked":""}> <span style="flex:1">${esc(l)}</span><b data-n="${L.length}">${eurTxt(unitaire*L.length)}</b></label>`).join("")}</div>`;
+// Choix de la cotisation : 2026, 2027, les deux, ou aucune (achats seuls).
+function enLigneChoix(choix,unitaire,sansCotis){
+  const opts=(choix||[]).map(x=>[[x],`Cotisation ${x}`]);
+  if(choix&&choix.length>1)opts.push([choix,`Cotisations ${choix.join(" et ")}`]);
+  if(sansCotis)opts.push([[],"Pas de cotisation, seulement des achats"]);
+  if(!opts.length)return"";
+  return`<div class="f"><span>Ma cotisation</span>${opts.map(([L,l],i)=>`<label class="check eOpt"><input type="radio" name="eSa" value="${esc(L.join(","))}" ${i===0?"checked":""}> <span style="flex:1">${esc(l)}</span>${L.length?`<b data-n="${L.length}">${eurTxt(unitaire*L.length)}</b>`:""}</label>`).join("")}</div>`;
 }
 // Montant libre au-dessus du minimum (le surplus est compté en don).
-const enLigneDon=mn=>`<label class="f"><span>Montant par année (minimum ${eurTxt(mn)}, vous pouvez donner plus)</span><input id="eMt" type="number" inputmode="decimal" min="${mn}" step="1" value="${mn}"></label>`;
+const enLigneDon=mn=>`<div id="eDonW"><label class="f"><span>Montant de la cotisation par année (minimum ${eurTxt(mn)}, vous pouvez donner plus)</span><input id="eMt" type="number" inputmode="decimal" min="${mn}" step="1" value="${mn}"></label></div>`;
 document.addEventListener("input",e=>{if(e.target&&e.target.id==="eMt"){const v=num(e.target.value);if(v>0)$$("[data-n]").forEach(b=>b.textContent=eurTxt(v*+b.dataset.n));}});
-function enLigneParAn(mn){const x=$("#eMt");const v=x?num(x.value):mn;if(!(v>=mn)){toast(`Le minimum est de ${eurTxt(mn)} par année`);return null;}if(v>500){toast("Montant trop élevé");return null;}return Math.round(v*100)/100;}
-const enLigneSaisons=v=>{const x=$('[name="eSa"]:checked',v)||$('[name="eSa"]',v);return x?x.value.split(","):[];};
-const enLigneBoutiques=()=>`<div style="border-top:1px solid var(--line);margin-top:16px;padding-top:12px"><p class="note" style="text-align:center;margin-top:0">Nos livres et nos CD sont aussi en vente en ligne :</p>
-  <div class="btns" style="margin:0"><a class="btn sec" href="https://www.helloasso.com/associations/amicale-de-la-musique-des-gardiens-de-la-paix/boutiques/nos-livres" target="_blank" rel="noopener">Nos livres</a><a class="btn sec" href="https://www.helloasso.com/associations/amicale-de-la-musique-des-gardiens-de-la-paix/boutiques/catalogue-de-cd" target="_blank" rel="noopener">Nos CD</a></div></div>`;
+const enLigneSaisons=v=>{const x=$('[name="eSa"]:checked',v)||$('[name="eSa"]',v);return x&&x.value?x.value.split(","):[];};
+// Boutique : le livre (prix adhérent) et les CD, remis en main propre ou envoyés.
+const EL={q:{},cat:[],port:{},aJour:false};
+function enLigneArticles(cat){
+  if(!cat||!cat.length)return"";
+  const ligne=p=>`<div class="eArt"><div style="flex:1;min-width:0"><span style="font-weight:600">${esc(p.titre)}</span><small class="note" style="display:block;margin:0">${p.prixAdherent<p.prix?`${eurTxt(p.prix)} · ${eurTxt(p.prixAdherent)} pour les adhérents`:eurTxt(p.prix)}</small></div>
+    <button type="button" class="btn sm sec" data-moins="${esc(p.code)}" aria-label="Retirer un exemplaire">−</button><span class="eQ" data-q="${esc(p.code)}">0</span><button type="button" class="btn sm sec" data-plus="${esc(p.code)}" aria-label="Ajouter un exemplaire">+</button></div>`;
+  const liv=cat.filter(p=>p.type==="livres"),cd=cat.filter(p=>p.type==="cd");
+  return`${liv.length?`<h3 style="margin:22px 2px 6px">Le livre de la Musique</h3><div class="list" style="margin:0">${liv.map(ligne).join("")}</div>`:""}
+    ${cd.length?`<h3 style="margin:18px 2px 6px">Nos CD</h3><div class="list" style="margin:0">${cd.map(ligne).join("")}</div>`:""}
+    <div id="eLiv" hidden><div class="f" style="margin-top:14px"><span>Je reçois mes articles</span>
+      <label class="check eOpt"><input type="radio" name="eLv" value="main" checked> <span style="flex:1">En main propre, auprès de l'Amicale</span></label>
+      <label class="check eOpt"><input type="radio" name="eLv" value="envoi"> <span style="flex:1">Par la poste</span><b id="ePort"></b></label></div>
+      <div id="eAdr" hidden><label class="f"><span>Adresse <i>*</i></span><input id="eAd" autocomplete="street-address"></label>
+      <div class="two"><label class="f"><span>Code postal <i>*</i></span><input id="eCp" inputmode="numeric" autocomplete="postal-code"></label><label class="f"><span>Ville <i>*</i></span><input id="eVi" autocomplete="address-level2"></label></div></div></div>`;
+}
+function enLigneTotal(){
+  const v=$("#view"),tt=$("#eTot",v);if(!tt)return;
+  const L=enLigneSaisons(v),mt=$("#eMt",v)?num($("#eMt",v).value):0,adh=L.length>0||EL.aJour;
+  let art=0;const nb={livres:0,cd:0};
+  EL.cat.forEach(p=>{const q=EL.q[p.code]||0;art+=q*(adh?p.prixAdherent:p.prix);nb[p.type]+=q;const s=$(`[data-q="${p.code}"]`,v);if(s)s.textContent=q;});
+  const n=nb.livres+nb.cd,portMax=nb.livres*(num(EL.port.livres))+nb.cd*(num(EL.port.cd)),envoi=n&&($('[name="eLv"]:checked',v)||{}).value==="envoi";
+  if($("#eLiv",v))$("#eLiv",v).hidden=!n;if($("#eAdr",v))$("#eAdr",v).hidden=!envoi;if($("#ePort",v))$("#ePort",v).textContent=n?`+ ${eurTxt(portMax)}`:"";
+  if($("#eDonW",v))$("#eDonW",v).hidden=!L.length;
+  const livre=EL.cat.find(p=>p.type==="livres");
+  tt.innerHTML=`Total : <b>${eurTxt((L.length?mt*L.length:0)+art+(envoi?portMax:0))}</b>${!adh&&nb.livres&&livre?`<small class="note" style="display:block">Adhérent à jour ? Le livre passe à ${eurTxt(livre.prixAdherent)} : le prix est ajusté au moment du paiement.</small>`:""}`;
+}
+function enLigneBoutique(v){
+  v.onclick=e=>{const p=e.target.closest("[data-plus],[data-moins]");if(!p)return;const k=p.dataset.plus||p.dataset.moins;
+    EL.q[k]=Math.max(0,Math.min(20,(EL.q[k]||0)+(p.dataset.plus?1:-1)));enLigneTotal();};
+  v.onchange=enLigneTotal;v.oninput=enLigneTotal;enLigneTotal();
+}
+function enLigneCommande(v,minimum){
+  const L=enLigneSaisons(v);let parAn=0;
+  if(L.length){parAn=num(($("#eMt",v)||{}).value)||minimum;if(parAn<minimum){toast(`Le minimum est de ${eurTxt(minimum)} par année`);return null;}if(parAn>500){toast("Montant trop élevé");return null;}}
+  const articles={};Object.entries(EL.q).forEach(([k,q])=>{if(q>0)articles[k]=q;});
+  if(!L.length&&!Object.keys(articles).length){toast("Choisissez une cotisation ou un article");return null;}
+  const livraison={mode:Object.keys(articles).length&&($('[name="eLv"]:checked',v)||{}).value==="envoi"?"envoi":"main"};
+  if(livraison.mode==="envoi"){livraison.adresse=$("#eAd",v).value.trim();livraison.cp=$("#eCp",v).value.trim();livraison.ville=$("#eVi",v).value.trim();
+    if(livraison.adresse.length<4||!/^\d{4,5}$/.test(livraison.cp)||livraison.ville.length<2){toast("Indiquez l'adresse d'envoi complète");return null;}}
+  return {saisons:L,parAn:Math.round(parAn*100)/100,articles,livraison};
+}
 function enLigneLier(v,corps){
-  $$("[data-f]",v).forEach(b=>b.onclick=async()=>{
-    const x=corps();if(!x)return;
+  $$("[data-f]",v).forEach(b=>b.onclick=async e=>{
+    e.stopPropagation();const x=corps();if(!x)return;
     $$("[data-f]",v).forEach(y=>y.disabled=true);const t=b.textContent;b.textContent="Ouverture du paiement…";
     try{const r=await payerAppel({action:"lancer",fournisseur:b.dataset.f,...x});location.href=r.url;}
     catch(e){toast(e.message);b.textContent=t;$$("[data-f]",v).forEach(y=>y.disabled=false);}
   });
 }
+const enLigneTot=`<p id="eTot" style="text-align:center;font-size:20px;margin:18px 0 4px"></p>`;
 async function enLignePage(t){
-  const v=enLigneCadre(`<p style="text-align:center">Chargement…</p>`);
+  enLigneCadre(`<p style="text-align:center">Chargement…</p>`);
   try{
     if(enLigneId(t)){
       const r=await payerAppel({action:"info",id:t});
       if(r.statut==="payee"||r.statut==="attente"||r.statut==="traitement")return enLigneRetour(t);
-      if(!r.choix||!r.choix.length)return enLigneCadre(`<h2 style="text-align:center">Cotisation déjà réglée</h2><p class="note" style="text-align:center">Merci ${esc(r.prenom)} : vos cotisations sont à jour.</p>${enLigneBoutiques()}`);
-      enLigneCadre(`<h2 style="margin:0 0 6px;text-align:center">Ma cotisation</h2>
+      Object.assign(EL,{q:{},cat:r.catalogue||[],port:r.port||{},aJour:!!r.aJour});
+      const mn=r.unitaire||r.montant,aRegler=r.choix&&r.choix.length;
+      const v=enLigneCadre(`<h2 style="margin:0 0 6px;text-align:center">${aRegler?"Ma cotisation":"Mes achats"}</h2>
         <p style="text-align:center;font-size:20px;margin:6px 0 12px"><b>${esc(r.prenom)} ${esc(String(r.nom||"").toUpperCase())}</b></p>
-        ${enLigneChoix(r.choix,r.unitaire||r.montant)}${enLigneDon(r.unitaire||r.montant)}${enLigneBoutons(r.fournisseurs)}${enLigneBoutiques()}`);
-      enLigneLier($("#view"),()=>{const pa=enLigneParAn(r.unitaire||r.montant);return pa?{id:t,parAn:pa,saisons:enLigneSaisons($("#view"))}:null;});
+        ${aRegler?"":`<p class="note" style="text-align:center">Vos cotisations sont à jour, merci ! Le livre vous est proposé au prix adhérent.</p>`}
+        ${enLigneChoix(r.choix,mn,EL.cat.length>0)}${aRegler?enLigneDon(mn):""}${enLigneArticles(EL.cat)}${enLigneTot}${enLigneBoutons(r.fournisseurs)}`);
+      enLigneBoutique(v);
+      enLigneLier(v,()=>{const c=enLigneCommande(v,mn);return c?{id:t,...c}:null;});
       return;
     }
     const r=await payerAppel({action:"config"});
-    enLigneCadre(`<h2 style="margin:0 0 4px;text-align:center">Adhérer à l'Amicale</h2>
+    Object.assign(EL,{q:{},cat:r.catalogue||[],port:r.port||{},aJour:false});
+    const v=enLigneCadre(`<h2 style="margin:0 0 4px;text-align:center">Adhérer à l'Amicale</h2>
       <p style="text-align:center;margin:0 0 10px">Cotisation minimale par année : <b>${eurTxt(r.unitaire||r.montant)}</b> (actifs et retraités de la Musique) ou <b>${eurTxt(r.sympathisant||20)}</b> (sympathisants)</p>
       <div class="two"><label class="f"><span>Prénom <i>*</i></span><input id="eP" autocomplete="given-name" autocapitalize="words"></label>
       <label class="f"><span>Nom <i>*</i></span><input id="eN" autocomplete="family-name" autocapitalize="characters"></label></div>
@@ -2926,21 +2972,24 @@ async function enLignePage(t){
       <label class="f"><span>Téléphone (facultatif)</span><input id="eT" type="tel" autocomplete="tel"></label>
       <label class="check"><input type="checkbox" id="eNv" ${t==="nouveau"?"checked":""}> C'est ma première adhésion à l'Amicale</label>
       <div class="f"><span>Je suis</span>
-        <label class="check" style="border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin:6px 0"><input type="radio" name="eSt" value="musique" checked> <span style="flex:1">Musicien ou administratif de la Musique, actif ou retraité</span><b>${eurTxt(r.unitaire||r.montant)}</b></label>
-        <label class="check" style="border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin:6px 0"><input type="radio" name="eSt" value="sympathisant"> <span style="flex:1">Sympathisant</span><b>${eurTxt(r.sympathisant||20)}</b></label></div>
-      <div id="eCh"></div>
+        <label class="check eOpt"><input type="radio" name="eSt" value="musique" checked> <span style="flex:1">Musicien ou administratif de la Musique, actif ou retraité</span><b>${eurTxt(r.unitaire||r.montant)}</b></label>
+        <label class="check eOpt"><input type="radio" name="eSt" value="sympathisant"> <span style="flex:1">Sympathisant</span><b>${eurTxt(r.sympathisant||20)}</b></label></div>
+      <div id="eCh"></div>${enLigneArticles(EL.cat)}${enLigneTot}
       ${enLigneBoutons(r.fournisseurs)}
-      <p class="note" style="margin-top:12px">Vos coordonnées servent uniquement à la gestion des adhésions de l'Amicale.</p>${enLigneBoutiques()}`);
-    const majCh=()=>{const sy=($('[name="eSt"]:checked')||{}).value==="sympathisant";const mn=sy?(r.sympathisant||20):(r.unitaire||r.montant);
-      const old=enLigneSaisons($("#view")).join(",");$("#eCh").innerHTML=enLigneChoix(r.choix||[r.saison],mn)+enLigneDon(mn);
-      if(old){const x=$(`[name="eSa"][value="${old}"]`);if(x)x.checked=true;}};
-    majCh();$$('[name="eSt"]').forEach(x=>x.onchange=majCh);
-    enLigneLier($("#view"),()=>{
-      const sy=($('[name="eSt"]:checked')||{}).value==="sympathisant",mn=sy?(r.sympathisant||20):(r.unitaire||r.montant),pa=enLigneParAn(mn);if(!pa)return null;
-      const prenom=$("#eP").value.trim(),nom=$("#eN").value.trim(),email=$("#eM").value.trim();
+      <p class="note" style="margin-top:12px">Vos coordonnées servent uniquement à la gestion des adhésions et des commandes de l'Amicale.</p>`);
+    const minimum=()=>($('[name="eSt"]:checked',v)||{}).value==="sympathisant"?(r.sympathisant||20):(r.unitaire||r.montant);
+    const majCh=()=>{const mn=minimum(),old=($('[name="eSa"]:checked',v)||{}).value;
+      $("#eCh",v).innerHTML=enLigneChoix(r.choix||[r.saison],mn,EL.cat.length>0)+enLigneDon(mn);
+      if(old!==undefined){const x=$$('[name="eSa"]',v).find(y=>y.value===old);if(x)x.checked=true;}enLigneTotal();};
+    majCh();$$('[name="eSt"]',v).forEach(x=>x.addEventListener("change",majCh));
+    enLigneBoutique(v);
+    enLigneLier(v,()=>{
+      const sy=($('[name="eSt"]:checked',v)||{}).value==="sympathisant";
+      const prenom=$("#eP",v).value.trim(),nom=$("#eN",v).value.trim(),email=$("#eM",v).value.trim();
       if(!prenom||!nom){toast("Indiquez votre prénom et votre nom");return null;}
       if(email&&!mailOk(email)){toast("Adresse mail invalide");return null;}
-      return {prenom,nom,email,tel:$("#eT").value.trim(),premiere:$("#eNv").checked,sympathisant:sy,parAn:pa,saisons:enLigneSaisons($("#view"))};
+      const c=enLigneCommande(v,minimum());if(!c)return null;
+      return {prenom,nom,email,tel:$("#eT",v).value.trim(),premiere:$("#eNv",v).checked,sympathisant:sy,...c};
     });
   }catch(e){enLigneCadre(`<h2 style="text-align:center">Paiement indisponible</h2><p class="note" style="text-align:center">${esc(e.message)}</p>`);}
 }
@@ -2954,12 +3003,14 @@ async function enLigneRetour(id){
   }
   if(!r){enLigneCadre(`<h2 style="text-align:center">Vérification impossible</h2><p class="note" style="text-align:center">${esc(err||"Vérifiez la connexion internet.")}</p><button class="btn full" onclick="location.reload()">Réessayer</button>`);return;}
   const qui=`${esc(r.prenom||"")}`;
+  const cmd=r.articles&&r.articles.length?`<div class="card" style="margin-top:14px"><b>Votre commande</b>${r.articles.map(a=>`<div class="note" style="display:flex;justify-content:space-between;gap:8px"><span>${esc(a.titre)}${a.qte>1?" × "+a.qte:""}</span><span>${eurTxt(a.total)}</span></div>`).join("")}${r.port?`<div class="note" style="display:flex;justify-content:space-between"><span>Frais d'envoi</span><span>${eurTxt(r.port)}</span></div>`:""}
+    <p style="margin:8px 0 0">${r.livraison&&r.livraison.mode==="envoi"?"Vos articles vous seront envoyés par la poste.":"Vos articles vous seront remis en main propre par l'Amicale."}</p></div>`:"";
   if(r.statut==="payee"){
     const C=(r.cartes&&r.cartes.length?r.cartes:(r.carte?[r.carte]:[])),L=r.saisons||[r.saison],nc=C.length;
     const v=enLigneCadre(`<div style="width:72px;height:72px;margin:0 auto 10px;border-radius:50%;background:var(--ok);color:#fff;font-size:44px;line-height:72px;text-align:center;font-weight:700">✓</div>
-      <h2 style="text-align:center;margin:0 0 6px">Merci ${qui} !</h2><p style="text-align:center;margin:0 0 14px">${L.length>1?`Vos cotisations ${esc(L.join(" et "))} sont réglées.`:`Votre cotisation ${esc(L[0])} est réglée.`}</p>
+      <h2 style="text-align:center;margin:0 0 6px">Merci ${qui} !</h2><p style="text-align:center;margin:0 0 14px">${L.length>1?`Vos cotisations ${esc(L.join(" et "))} sont réglées.`:L.length?`Votre cotisation ${esc(L[0])} est réglée.`:"Votre commande est réglée."}</p>
       ${nc?`<p class="note" style="text-align:center">Voici votre carte d'adhérent${nc>1?" pour chaque année":""}. Gardez-la sur votre téléphone ou imprimez-la.</p><div id="eCarte" style="display:grid;gap:10px"></div>
-      <button class="btn gold full" id="ePdf" style="margin-top:12px">Télécharger ${nc>1?"mes cartes":"ma carte"} (PDF)</button>`:`<p class="note" style="text-align:center">Votre carte d'adhérent vous sera remise par l'Amicale.</p>`}`);
+      <button class="btn gold full" id="ePdf" style="margin-top:12px">Télécharger ${nc>1?"mes cartes":"ma carte"} (PDF)</button>`:L.length?`<p class="note" style="text-align:center">Votre carte d'adhérent vous sera remise par l'Amicale.</p>`:""}${cmd}`);
     if(nc){
       const D=C.map(c=>({...c,delivree:new Date(c.cree||Date.now()).toLocaleDateString("fr-FR")}));
       try{let h="";for(const d of D){const im=await carteImages(d);h+=`<img src="${im.recto}" alt="Carte ${esc(d.saison)}, recto" style="width:100%;border-radius:10px;box-shadow:0 1px 6px rgba(0,0,0,.15)"><img src="${im.verso}" alt="Carte ${esc(d.saison)}, verso" style="width:100%;border-radius:10px;box-shadow:0 1px 6px rgba(0,0,0,.15)">`;}$("#eCarte",v).innerHTML=h;}catch(e){}
@@ -2967,7 +3018,7 @@ async function enLigneRetour(id){
     }
   }else if(r.statut==="attente"){
     enLigneCadre(`<div style="width:72px;height:72px;margin:0 auto 10px;border-radius:50%;background:var(--ok);color:#fff;font-size:44px;line-height:72px;text-align:center;font-weight:700">✓</div>
-      <h2 style="text-align:center;margin:0 0 6px">Merci ${qui} !</h2><p style="text-align:center">Votre paiement est bien reçu. Le trésorier finalise votre adhésion, votre carte vous sera remise par l'Amicale.</p>`);
+      <h2 style="text-align:center;margin:0 0 6px">Merci ${qui} !</h2><p style="text-align:center">Votre paiement est bien reçu. Le trésorier finalise votre adhésion, votre carte vous sera remise par l'Amicale.</p>${cmd}`);
   }else if(r.statut==="echec"||r.statut==="cree"){
     enLigneCadre(`<h2 style="text-align:center">Le paiement n'a pas abouti</h2><p class="note" style="text-align:center">Aucun montant n'a été prélevé.</p><a class="btn gold full" href="${esc(enLigneUrl(id))}">Réessayer</a>`);
   }else{
@@ -2980,7 +3031,7 @@ async function enLigneQrFiche(m){
   let r;try{toast("Préparation du QR code…");r=await payerAppel({action:"qr",membreId:m.id});}catch(e){return toast(e.message);}
   const url=enLigneUrl(r.id);
   openSheet("Payer en ligne",`<div class="card" style="text-align:center"><p style="margin-top:0">Faites scanner ce QR code par <b>${esc(fullName(m))}</b> avec l'appareil photo de son téléphone.</p>
-    <div id="eQr"></div><p style="font-size:18px;font-weight:700;margin:8px 0 0">Cotisation ${esc((r.choix||[r.saison]).join(" ou "))} · ${eurTxt(r.montant)} par année</p><p class="note" style="margin:2px 0 0">L'adhérent choisit l'année sur son téléphone.</p>
+    <div id="eQr"></div><p style="font-size:18px;font-weight:700;margin:8px 0 0">${(r.choix||[]).length?`Cotisation ${esc(r.choix.join(" ou "))} · ${eurTxt(r.montant)} par année`:"Cotisations à jour : livre et CD"}</p><p class="note" style="margin:2px 0 0">L'adhérent choisit sur son téléphone : année, livre, CD.</p>
     <p class="note" id="eSt">En attente du paiement…</p></div>
     <button class="btn sec full" id="eCopy">Copier le lien de paiement</button>`,q=>{
     const cv=qrCanvas(url,320);cv.style.cssText="width:260px;max-width:100%;height:auto";$("#eQr",q).appendChild(cv);
@@ -3028,13 +3079,20 @@ VIEWS.enligne={
   bind(){
     VIEWS.enligne.update();
     S.sb.from("demandes_paiement").select("*").order("cree",{ascending:false}).limit(30).then(({data,error})=>{S._dem=error?null:data;VIEWS.enligne.update();});
+    S.sb.from("demandes_paiement").select("*").in("statut",["payee","attente"]).is("livre",null).not("articles","is",null).order("payeLe").then(({data,error})=>{S._cmd=error?[]:(data||[]).filter(d=>d.articles&&d.articles.length);VIEWS.enligne.update();});
     payerAppel({action:"verifier"}).then(x=>{if(x&&x.enregistres){toast(`${x.enregistres} paiement${x.enregistres>1?"s":""} en ligne enregistré${x.enregistres>1?"s":""}`);reload();}}).catch(()=>{});
   },
   update(){
     const el=$("#eBody");if(!el)return;
     const url=enLigneUrl("1"),av=S.membres.filter(m=>m.aVerifier);
     const ST={cree:["Créée",""],lancee:["En cours","warn"],traitement:["En cours","warn"],payee:["Payée","ok"],attente:["Compte d'attente","warn"],echec:["Échouée","bad"]};
-    el.innerHTML=`${av.length?`<h3>Nouvelles fiches à vérifier</h3><div class="list">${av.map(m=>`<div class="row" data-m="${esc(m.id)}"><div class="main"><b>${esc(fullName(m))}</b><small>${esc(m.aVerifier)}</small></div><div class="right">›</div></div>`).join("")}</div>`:""}
+    const qn=d=>{const m=membre(d.membreId),n=d.nouveau||{};return m?fullName(m):`${n.prenom||""} ${(n.nom||"").toUpperCase()}`.trim()||"—";};
+    const cmd=S._cmd||[];
+    el.innerHTML=`${cmd.length?`<h3>Commandes à remettre ou à envoyer</h3><div class="list">${cmd.map(d=>{const L=d.livraison||{};return`<div class="row" style="cursor:default;align-items:flex-start"><div class="main"><b>${esc(qn(d))}</b>
+        <small style="display:block">${d.articles.map(a=>esc(a.titre)+(a.qte>1?" × "+a.qte:"")).join(" · ")}</small>
+        <small style="display:block">${L.mode==="envoi"?`À envoyer : ${esc([L.adresse,[L.cp,L.ville].filter(Boolean).join(" ")].filter(Boolean).join(", "))}`:"À remettre en main propre"} · payé le ${d.payeLe?new Date(d.payeLe).toLocaleDateString("fr-FR"):"—"}</small></div>
+        <div class="right"><button class="btn sm" data-livre="${esc(d.id)}">${L.mode==="envoi"?"Envoyé":"Remis"}</button></div></div>`;}).join("")}</div>`:""}
+      ${av.length?`<h3>Nouvelles fiches à vérifier</h3><div class="list">${av.map(m=>`<div class="row" data-m="${esc(m.id)}"><div class="main"><b>${esc(fullName(m))}</b><small>${esc(m.aVerifier)}</small></div><div class="right">›</div></div>`).join("")}</div>`:""}
       <h3>Page publique « Adhérer à l'Amicale »</h3>
       <div class="card" style="text-align:center"><div id="eQr"></div><p class="note" style="word-break:break-all">${esc(url)}</p>
       <div class="btns"><button class="btn gold" id="eAff">Imprimer l'affiche</button><button class="btn sec" id="eCopy">Copier le lien</button></div>
@@ -3045,6 +3103,9 @@ VIEWS.enligne={
     $("#eAff",el).onclick=()=>enLigneAffiche().catch(e=>toast(e.message));
     $("#eCopy",el).onclick=async()=>{try{await navigator.clipboard.writeText(url);toast("Lien copié");}catch(e){toast(url);}};
     $$("[data-m]",el).forEach(r=>r.onclick=()=>memberSheet(r.dataset.m));
+    $$("[data-livre]",el).forEach(b=>b.onclick=async e=>{e.stopPropagation();
+      const {error}=await S.sb.from("demandes_paiement").update({livre:new Date().toISOString()}).eq("id",b.dataset.livre);
+      if(error)return toast("Impossible : "+errMsg(error));S._cmd=(S._cmd||[]).filter(d=>d.id!==b.dataset.livre);toast("C'est noté");VIEWS.enligne.update();});
   }
 };
 
