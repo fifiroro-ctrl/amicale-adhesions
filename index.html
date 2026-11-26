@@ -3190,7 +3190,7 @@ async function caisseSheet(mid){
       const kr=$("#kRef",el);if(kr)kr.oninput=()=>{T.ref=kr.value;};
     };
     el.onclick=async e=>{
-      const r=e.target.closest("[data-mid]");if(r){T.qui="membre";T.mid=r.dataset.mid;const lb=libres();T.cotis=lb[0]||"";rendre();return;}
+      const r=e.target.closest("[data-mid]");if(r){T.qui="membre";T.mid=r.dataset.mid;const lb=libres(),s0=String(cfg().saison);T.cotis=lb.includes(s0)?s0:"";rendre();return;}
       const b=e.target.closest(".pave");
       if(b){const g=b.dataset.g,v=b.dataset.v;
         if(g==="qui"){T.qui=v;T.cotis=v==="nouveau"?saisonsCaisse()[0]:"";}
