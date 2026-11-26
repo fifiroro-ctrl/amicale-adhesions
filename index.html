@@ -166,7 +166,7 @@ const CATS=["BF","Hie","Retraité","Sympathisant"];
 const PREMIERE_SAISON=2026;
 function defaultSaison(){return String(new Date().getFullYear());}
 const DEF_CFG={
-  asso:"Amicale de la Musique des Gardiens de la Paix",sigle:"AMGP",adresse:"",montant:10,
+  asso:"Amicale de la Musique des Gardiens de la Paix",sigle:"AMGP",adresse:"",montant:10,montantSympathisant:20,
   tresorier:"",emailContact:"",ics:"",ibanAsso:"",bicAsso:"",prochainPrelevement:"",
   libSurplus:"Surplus / dons",fraisSumup:1.75,
   comptes:{cotis:"756000",surplus:"754100",frais:"627000",livres:"7071",cd:"7072",attente:"471000",especes:"530000",cheque:"511200",virement:"512000",prelevement:"512000",sumup:"511300",helloasso:"511400"},
@@ -212,8 +212,10 @@ function aJour(m){return paysSaison(m.id).length>0;}
 function isPot(m){return m.potentiel===true&&!aJour(m);}
 function isMembre(m){return m.actif!==false&&!isPot(m);}
 function prelevActif(m){return !!(m.prelevement&&m.prelevement.actif);}
-function montantDu(m){return num(m&&m.montantPerso)||num(cfg().montant);}
-function ventil(p){const t=r2(num(p.montant));let c=p.cotis!=null&&p.cotis!==""?r2(num(p.cotis)):Math.min(t,num(cfg().montant));c=Math.min(c,t);return{total:t,cotis:c,surplus:r2(t-c)};}
+// Cotisation minimale : 10 € pour les actifs et retraités de la Musique, 20 € pour les sympathisants (montant personnalisé prioritaire).
+const estSympathisant=m=>!!m&&m.categorie==="Sympathisant";
+function montantDu(m){return num(m&&m.montantPerso)||(estSympathisant(m)?num(cfg().montantSympathisant)||20:num(cfg().montant));}
+function ventil(p){const t=r2(num(p.montant));let c=p.cotis!=null&&p.cotis!==""?r2(num(p.cotis)):Math.min(t,montantDu(membre(p.membreId))||num(cfg().montant));c=Math.min(c,t);return{total:t,cotis:c,surplus:r2(t-c)};}
 function fraisDe(p){return p.mode==="sumup"?r2(num(p.montant)*num(cfg().fraisSumup)/100):0;}
 function fill(tpl,v){return tpl.replace(/\{(\w+)\}/g,(_,k)=>v[k]??"");}
 function ibanClean(s){return String(s||"").replace(/\s/g,"").toUpperCase();}
@@ -964,8 +966,8 @@ VIEWS.reglages={
   shell:()=>{const c=cfg();const F=(k,l,t="text",ph="")=>`<label class="f"><span>${l}</span><input id="c_${k}" type="${t}" value="${esc(c[k])}" placeholder="${esc(ph)}"></label>`;
     return`<a class="back" href="#plus">‹ Plus</a>${intro("Votre espace","Réglages","Les fondations de l'appli.")}<div id="ban"></div>
     <h3>Association</h3><div class="card">${F("asso","Nom")}${F("sigle","Sigle (objet des mails, références)")}<label class="f"><span>Adresse (figure sur les reçus)</span><textarea id="c_adresse" style="min-height:70px">${esc(c.adresse)}</textarea></label>${F("tresorier","Signataire des reçus (trésorier)")}${F("emailContact","Mail du bureau","email")}</div>
-    <h3>Cotisation</h3><div class="card"><div class="two"><label class="f"><span>Saison (vide = année en cours)</span><input id="c_saison" value="${esc((S.config&&S.config.saison)||"")}" placeholder="${defaultSaison()}" inputmode="numeric"></label>${F("montant","Cotisation (€)","number")}</div>
-      ${F("libSurplus","Nom du surplus versé au-delà de la cotisation")}<p class="note">Un versement de 15 € donne 10 € de cotisation et 5 € de surplus. En comptabilité associative, un tel versement volontaire est souvent un don (compte 754) : à confirmer avec le trésorier.</p></div>
+    <h3>Cotisation</h3><div class="card"><div class="two"><label class="f"><span>Saison (vide = année en cours)</span><input id="c_saison" value="${esc((S.config&&S.config.saison)||"")}" placeholder="${defaultSaison()}" inputmode="numeric"></label>${F("montant","Cotisation minimale actifs et retraités (€)","number")}</div>${F("montantSympathisant","Cotisation minimale sympathisants (€)","number")}
+      ${F("libSurplus","Nom du surplus versé au-delà de la cotisation")}<p class="note">Un versement au-delà du minimum est compté en surplus : par exemple 15 € versés par un actif donnent 10 € de cotisation et 5 € de surplus. En comptabilité associative, un tel versement volontaire est souvent un don (compte 754) : à confirmer avec le trésorier.</p></div>
     <h3>Prélèvements SEPA</h3><div class="card">${F("ics","Identifiant créancier SEPA (ICS)","text","FR12ZZZ123456")}${F("ibanAsso","IBAN de l'association")}${F("bicAsso","BIC de l'association")}${F("prochainPrelevement","Prochain prélèvement","date")}<p class="note">L'ICS se demande à votre banque. Sans lui la banque refuse les prélèvements.</p></div>
     <h3>SumUp</h3><div class="card">${F("fraisSumup","Commission SumUp (%)","number")}<p class="note">Sert à estimer les frais bancaires dans l'export compta.</p></div>
     <h3>Comptes comptables</h3><div class="card"><div class="two">${[["cotis","Cotisations (crédit)"],["surplus","Surplus et dons (crédit)"],["livres","Ventes de livres (crédit)"],["cd","Ventes de CD (crédit)"],["attente","Compte d'attente (crédit)"],["frais","Frais bancaires"],...Object.entries(MODES)].map(([k,l])=>`<label class="f"><span>${l}</span><input data-cpt="${k}" value="${esc(c.comptes[k])}"></label>`).join("")}</div></div>
@@ -976,7 +978,7 @@ VIEWS.reglages={
     $("#cSave").onclick=async()=>{
       const v=k=>$("#c_"+k).value.trim();
       const d={};["asso","sigle","adresse","tresorier","emailContact","saison","ics","bicAsso","prochainPrelevement","msgRelance","msgPrenotif","libSurplus"].forEach(k=>d[k]=v(k));
-      d.montant=num(v("montant"));d.fraisSumup=num(v("fraisSumup"));d.ibanAsso=ibanClean(v("ibanAsso"));d.bicAsso=d.bicAsso.toUpperCase().replace(/\s/g,"");
+      d.montant=num(v("montant"));d.montantSympathisant=num(v("montantSympathisant"))||20;d.fraisSumup=num(v("fraisSumup"));d.ibanAsso=ibanClean(v("ibanAsso"));d.bicAsso=d.bicAsso.toUpperCase().replace(/\s/g,"");
       if(d.montant<=0)return toast("Montant de cotisation invalide");
       if(d.ibanAsso&&!ibanOk(d.ibanAsso))return toast("L'IBAN de l'association n'est pas valide");
       if(!bicOk(d.bicAsso))return toast("Le BIC n'est pas valide");
@@ -2883,10 +2885,14 @@ const enLigneBoutons=f=>`${f&&f.helloasso?`<button class="btn gold full big" dat
 // Choix 2026, 2027 ou les deux (selon ce qui reste à régler).
 function enLigneChoix(choix,unitaire){
   if(!choix||!choix.length)return"";
-  if(choix.length===1)return`<input type="hidden" name="eSa" value="${esc(choix[0])}"><p style="text-align:center;margin:0 0 6px">Cotisation ${esc(choix[0])}</p><p style="text-align:center;font-size:28px;font-weight:750;margin:0 0 10px">${eurTxt(unitaire)}</p>`;
+  if(choix.length===1)return`<input type="hidden" name="eSa" value="${esc(choix[0])}"><p style="text-align:center;margin:0 0 6px">Cotisation ${esc(choix[0])}</p><p style="text-align:center;font-size:28px;font-weight:750;margin:0 0 10px" data-n="1">${eurTxt(unitaire)}</p>`;
   const opts=[...choix.map(x=>[[x],`Cotisation ${x}`]),[choix,`${choix.join(" et ")}`]];
-  return`<div class="f"><span>Je règle</span>${opts.map(([L,l],i)=>`<label class="check" style="border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin:6px 0"><input type="radio" name="eSa" value="${esc(L.join(","))}" ${i===0?"checked":""}> <span style="flex:1">${esc(l)}</span><b>${eurTxt(unitaire*L.length)}</b></label>`).join("")}</div>`;
+  return`<div class="f"><span>Je règle</span>${opts.map(([L,l],i)=>`<label class="check" style="border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin:6px 0"><input type="radio" name="eSa" value="${esc(L.join(","))}" ${i===0?"checked":""}> <span style="flex:1">${esc(l)}</span><b data-n="${L.length}">${eurTxt(unitaire*L.length)}</b></label>`).join("")}</div>`;
 }
+// Montant libre au-dessus du minimum (le surplus est compté en don).
+const enLigneDon=mn=>`<label class="f"><span>Montant par année (minimum ${eurTxt(mn)}, vous pouvez donner plus)</span><input id="eMt" type="number" inputmode="decimal" min="${mn}" step="1" value="${mn}"></label>`;
+document.addEventListener("input",e=>{if(e.target&&e.target.id==="eMt"){const v=num(e.target.value);if(v>0)$$("[data-n]").forEach(b=>b.textContent=eurTxt(v*+b.dataset.n));}});
+function enLigneParAn(mn){const x=$("#eMt");const v=x?num(x.value):mn;if(!(v>=mn)){toast(`Le minimum est de ${eurTxt(mn)} par année`);return null;}if(v>500){toast("Montant trop élevé");return null;}return Math.round(v*100)/100;}
 const enLigneSaisons=v=>{const x=$('[name="eSa"]:checked',v)||$('[name="eSa"]',v);return x?x.value.split(","):[];};
 const enLigneBoutiques=()=>`<div style="border-top:1px solid var(--line);margin-top:16px;padding-top:12px"><p class="note" style="text-align:center;margin-top:0">Nos livres et nos CD sont aussi en vente en ligne :</p>
   <div class="btns" style="margin:0"><a class="btn sec" href="https://www.helloasso.com/associations/amicale-de-la-musique-des-gardiens-de-la-paix/boutiques/nos-livres" target="_blank" rel="noopener">Nos livres</a><a class="btn sec" href="https://www.helloasso.com/associations/amicale-de-la-musique-des-gardiens-de-la-paix/boutiques/catalogue-de-cd" target="_blank" rel="noopener">Nos CD</a></div></div>`;
@@ -2907,26 +2913,34 @@ async function enLignePage(t){
       if(!r.choix||!r.choix.length)return enLigneCadre(`<h2 style="text-align:center">Cotisation déjà réglée</h2><p class="note" style="text-align:center">Merci ${esc(r.prenom)} : vos cotisations sont à jour.</p>${enLigneBoutiques()}`);
       enLigneCadre(`<h2 style="margin:0 0 6px;text-align:center">Ma cotisation</h2>
         <p style="text-align:center;font-size:20px;margin:6px 0 12px"><b>${esc(r.prenom)} ${esc(String(r.nom||"").toUpperCase())}</b></p>
-        ${enLigneChoix(r.choix,r.unitaire||r.montant)}${enLigneBoutons(r.fournisseurs)}${enLigneBoutiques()}`);
-      enLigneLier($("#view"),()=>({id:t,saisons:enLigneSaisons($("#view"))}));
+        ${enLigneChoix(r.choix,r.unitaire||r.montant)}${enLigneDon(r.unitaire||r.montant)}${enLigneBoutons(r.fournisseurs)}${enLigneBoutiques()}`);
+      enLigneLier($("#view"),()=>{const pa=enLigneParAn(r.unitaire||r.montant);return pa?{id:t,parAn:pa,saisons:enLigneSaisons($("#view"))}:null;});
       return;
     }
     const r=await payerAppel({action:"config"});
     enLigneCadre(`<h2 style="margin:0 0 4px;text-align:center">Adhérer à l'Amicale</h2>
-      <p style="text-align:center;margin:0 0 10px">Cotisation : <b>${eurTxt(r.unitaire||r.montant)}</b> par année</p>
+      <p style="text-align:center;margin:0 0 10px">Cotisation minimale par année : <b>${eurTxt(r.unitaire||r.montant)}</b> (actifs et retraités de la Musique) ou <b>${eurTxt(r.sympathisant||20)}</b> (sympathisants)</p>
       <div class="two"><label class="f"><span>Prénom <i>*</i></span><input id="eP" autocomplete="given-name" autocapitalize="words"></label>
       <label class="f"><span>Nom <i>*</i></span><input id="eN" autocomplete="family-name" autocapitalize="characters"></label></div>
       <label class="f"><span>Mail (pour recevoir le reçu)</span><input id="eM" type="email" autocomplete="email" autocapitalize="off"></label>
       <label class="f"><span>Téléphone (facultatif)</span><input id="eT" type="tel" autocomplete="tel"></label>
       <label class="check"><input type="checkbox" id="eNv" ${t==="nouveau"?"checked":""}> C'est ma première adhésion à l'Amicale</label>
-      ${enLigneChoix(r.choix||[r.saison],r.unitaire||r.montant)}
+      <div class="f"><span>Je suis</span>
+        <label class="check" style="border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin:6px 0"><input type="radio" name="eSt" value="musique" checked> <span style="flex:1">Musicien ou administratif de la Musique, actif ou retraité</span><b>${eurTxt(r.unitaire||r.montant)}</b></label>
+        <label class="check" style="border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin:6px 0"><input type="radio" name="eSt" value="sympathisant"> <span style="flex:1">Sympathisant</span><b>${eurTxt(r.sympathisant||20)}</b></label></div>
+      <div id="eCh"></div>
       ${enLigneBoutons(r.fournisseurs)}
       <p class="note" style="margin-top:12px">Vos coordonnées servent uniquement à la gestion des adhésions de l'Amicale.</p>${enLigneBoutiques()}`);
+    const majCh=()=>{const sy=($('[name="eSt"]:checked')||{}).value==="sympathisant";const mn=sy?(r.sympathisant||20):(r.unitaire||r.montant);
+      const old=enLigneSaisons($("#view")).join(",");$("#eCh").innerHTML=enLigneChoix(r.choix||[r.saison],mn)+enLigneDon(mn);
+      if(old){const x=$(`[name="eSa"][value="${old}"]`);if(x)x.checked=true;}};
+    majCh();$$('[name="eSt"]').forEach(x=>x.onchange=majCh);
     enLigneLier($("#view"),()=>{
+      const sy=($('[name="eSt"]:checked')||{}).value==="sympathisant",mn=sy?(r.sympathisant||20):(r.unitaire||r.montant),pa=enLigneParAn(mn);if(!pa)return null;
       const prenom=$("#eP").value.trim(),nom=$("#eN").value.trim(),email=$("#eM").value.trim();
       if(!prenom||!nom){toast("Indiquez votre prénom et votre nom");return null;}
       if(email&&!mailOk(email)){toast("Adresse mail invalide");return null;}
-      return {prenom,nom,email,tel:$("#eT").value.trim(),premiere:$("#eNv").checked,saisons:enLigneSaisons($("#view"))};
+      return {prenom,nom,email,tel:$("#eT").value.trim(),premiere:$("#eNv").checked,sympathisant:sy,parAn:pa,saisons:enLigneSaisons($("#view"))};
     });
   }catch(e){enLigneCadre(`<h2 style="text-align:center">Paiement indisponible</h2><p class="note" style="text-align:center">${esc(e.message)}</p>`);}
 }
@@ -2992,11 +3006,12 @@ async function enLigneAffiche(){
   doc.text("AMICALE DE LA MUSIQUE DES GARDIENS DE LA PAIX DE PARIS",105,74,{align:"center"});
   doc.setFontSize(38);doc.text("Adhérez à l'Amicale",105,96,{align:"center"});
   doc.setFont("helvetica","normal");doc.setFontSize(20);doc.setTextColor(60,60,70);
-  doc.text(`Cotisation ${c.saison} ou ${+c.saison+1} : ${String(num(c.montant)).replace(".",",")} € par année`,105,110,{align:"center"});
+  doc.text(`Cotisation ${c.saison} ou ${+c.saison+1}, par année :`,105,108,{align:"center"});
+  doc.setFontSize(15);doc.text(`${String(num(c.montant)).replace(".",",")} € minimum pour les actifs et retraités de la Musique · ${String(num(c.montantSympathisant)||20).replace(".",",")} € minimum pour les sympathisants`,105,116,{align:"center",maxWidth:180});
   // QR code dessiné en carrés vectoriels : net à l'impression et fichier léger
   const qr=new QRCodeLib.QRCode(-1,QRCodeLib.L.M);qr.addData(url);qr.make();
-  const nq=qr.getModuleCount(),mq=100/nq;doc.setFillColor(22,36,74);
-  for(let r=0;r<nq;r++)for(let k=0;k<nq;k++)if(qr.isDark(r,k))doc.rect(55+k*mq,120+r*mq,mq+0.02,mq+0.02,"F");
+  const nq=qr.getModuleCount(),mq=90/nq;doc.setFillColor(22,36,74);
+  for(let r=0;r<nq;r++)for(let k=0;k<nq;k++)if(qr.isDark(r,k))doc.rect(60+k*mq,132+r*mq,mq+0.02,mq+0.02,"F");
   doc.setTextColor(22,36,74);doc.setFont("helvetica","bold");doc.setFontSize(18);
   doc.text("Scannez avec l'appareil photo de votre téléphone",105,232,{align:"center"});
   doc.setFont("helvetica","normal");doc.setFontSize(13);doc.setTextColor(80,80,90);
