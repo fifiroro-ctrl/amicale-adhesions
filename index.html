@@ -3077,31 +3077,39 @@ function cmdListe(el,apres){
     if(error)return toast("Impossible : "+errMsg(error));
     S._cmd=cmd.filter(x=>x.id!==d.id);toast("C'est noté");cmdListe(el,apres);if(apres)apres();});
 }
-// Affiche A4 à imprimer : logo, cotisation et QR code de la page publique.
-async function enLigneAffiche(){
+// Affiche à imprimer : en A4 (par4=false) ou 4 affichettes A6 sur une feuille A4 à découper (par4=true).
+async function enLigneAffiche(par4){
   const J=window.jspdf&&window.jspdf.jsPDF;if(!J)return toast("Module PDF non chargé : vérifiez la connexion");
   const c=cfg(),doc=new J({unit:"mm",format:"a4"}),url=enLigneUrl("1");
-  const logo=await carteChargerLogo();
-  if(logo){const cv=document.createElement("canvas");cv.width=cv.height=600;const x=cv.getContext("2d");x.fillStyle="#fff";x.fillRect(0,0,600,600);x.drawImage(logo,0,0,600,600);doc.addImage(cv.toDataURL("image/jpeg",0.92),"JPEG",80,14,50,50);}
-  doc.setTextColor(22,36,74);doc.setFont("helvetica","bold");doc.setFontSize(13);
-  doc.text("AMICALE DE LA MUSIQUE DES GARDIENS DE LA PAIX DE PARIS",105,74,{align:"center"});
-  doc.setFontSize(38);doc.text("Adhérez à l'Amicale",105,96,{align:"center"});
-  doc.setFont("helvetica","normal");doc.setFontSize(20);doc.setTextColor(60,60,70);
-  doc.text(`Cotisation ${c.saison} ou ${+c.saison+1}, par année :`,105,108,{align:"center"});
-  doc.setFontSize(15);doc.text(`${String(num(c.montant)).replace(".",",")} € minimum pour les actifs et retraités de la Musique · ${String(num(c.montantSympathisant)||20).replace(".",",")} € minimum pour les sympathisants`,105,116,{align:"center",maxWidth:180});
-  // QR code dessiné en carrés vectoriels : net à l'impression et fichier léger
-  const qr=new QRCodeLib.QRCode(-1,QRCodeLib.L.M);qr.addData(url);qr.make();
-  const nq=qr.getModuleCount(),mq=90/nq;doc.setFillColor(22,36,74);
-  for(let r=0;r<nq;r++)for(let k=0;k<nq;k++)if(qr.isDark(r,k))doc.rect(60+k*mq,132+r*mq,mq+0.02,mq+0.02,"F");
-  doc.setTextColor(22,36,74);doc.setFont("helvetica","bold");doc.setFontSize(18);
-  doc.text("Scannez avec l'appareil photo de votre téléphone",105,232,{align:"center"});
-  doc.setFont("helvetica","normal");doc.setFontSize(13);doc.setTextColor(80,80,90);
-  doc.text("Paiement sécurisé par carte bancaire (HelloAsso ou SumUp).",105,242,{align:"center"});
-  doc.text("Votre carte d'adhérent s'affiche aussitôt sur votre téléphone.",105,249,{align:"center"});
-  doc.text("Nos livres et nos CD sont aussi en vente sur la même page.",105,256,{align:"center"});
-  doc.setFillColor(49,69,120);doc.rect(0,272,210,8,"F");doc.setFillColor(160,34,55);doc.rect(0,280,210,17,"F");
-  doc.setFontSize(9);doc.setTextColor(255,255,255);doc.text(url,105,290,{align:"center"});
-  await saveFile(`affiche-adhesion-${c.saison}.pdf`,doc.output("blob"));
+  const logo=await carteChargerLogo();let logoJpg="";
+  if(logo){const cv=document.createElement("canvas");cv.width=cv.height=600;const x=cv.getContext("2d");x.fillStyle="#fff";x.fillRect(0,0,600,600);x.drawImage(logo,0,0,600,600);logoJpg=cv.toDataURL("image/jpeg",0.92);}
+  const qr=new QRCodeLib.QRCode(-1,QRCodeLib.L.M);qr.addData(url);qr.make();const nq=qr.getModuleCount();
+  const eu=v=>String(num(v)).replace(".",",");
+  const dessiner=(ox,oy,s)=>{
+    const X=x=>ox+x*s,Y=y=>oy+y*s,F=t=>t*s;
+    if(logoJpg)doc.addImage(logoJpg,"JPEG",X(80),Y(14),F(50),F(50));
+    doc.setTextColor(22,36,74);doc.setFont("helvetica","bold");doc.setFontSize(F(13));
+    doc.text("AMICALE DE LA MUSIQUE DES GARDIENS DE LA PAIX DE PARIS",X(105),Y(74),{align:"center"});
+    doc.setFontSize(F(38));doc.text("Adhérez à l'Amicale",X(105),Y(96),{align:"center"});
+    doc.setFont("helvetica","normal");doc.setFontSize(F(20));doc.setTextColor(60,60,70);
+    doc.text(`Cotisation ${c.saison} ou ${+c.saison+1}, par année :`,X(105),Y(108),{align:"center"});
+    doc.setFontSize(F(15));doc.text(`${eu(c.montant)} € minimum pour les actifs et retraités de la Musique · ${eu(num(c.montantSympathisant)||20)} € minimum pour les sympathisants`,X(105),Y(116),{align:"center",maxWidth:F(180)});
+    const mq=F(90)/nq;doc.setFillColor(22,36,74);
+    for(let r=0;r<nq;r++)for(let k=0;k<nq;k++)if(qr.isDark(r,k))doc.rect(X(60)+k*mq,Y(132)+r*mq,mq+0.02,mq+0.02,"F");
+    doc.setTextColor(22,36,74);doc.setFont("helvetica","bold");doc.setFontSize(F(18));
+    doc.text("Scannez avec l'appareil photo de votre téléphone",X(105),Y(232),{align:"center"});
+    doc.setFont("helvetica","normal");doc.setFontSize(F(13));doc.setTextColor(80,80,90);
+    doc.text("Paiement sécurisé par carte bancaire (HelloAsso ou SumUp).",X(105),Y(242),{align:"center"});
+    doc.text("Votre carte d'adhérent s'affiche aussitôt sur votre téléphone.",X(105),Y(249),{align:"center"});
+    doc.text("Livre, CD et mug de l'Amicale aussi en vente sur la même page.",X(105),Y(256),{align:"center"});
+    doc.setFillColor(49,69,120);doc.rect(X(0),Y(272),F(210),F(8),"F");doc.setFillColor(160,34,55);doc.rect(X(0),Y(280),F(210),F(17),"F");
+    doc.setFontSize(F(9));doc.setTextColor(255,255,255);doc.text(url,X(105),Y(290),{align:"center"});
+  };
+  if(par4){
+    [[0,0],[105,148.5],[0,148.5],[105,0]].forEach(([x,y])=>dessiner(x,y,0.5));
+    doc.setDrawColor(150,150,150);doc.setLineWidth(0.2);doc.setLineDashPattern([2,2],0);doc.line(105,0,105,297);doc.line(0,148.5,210,148.5);
+  }else dessiner(0,0,1);
+  await saveFile(`${par4?"affichettes":"affiche"}-adhesion-${c.saison}.pdf`,doc.output("blob"));
 }
 SUBVIEWS.push("enligne");
 VIEWS.enligne={
@@ -3120,12 +3128,12 @@ VIEWS.enligne={
       ${av.length?`<h3>Nouvelles fiches à vérifier</h3><div class="list">${av.map(m=>`<div class="row" data-m="${esc(m.id)}"><div class="main"><b>${esc(fullName(m))}</b><small>${esc(m.aVerifier)}</small></div><div class="right">›</div></div>`).join("")}</div>`:""}
       <h3>Page publique « Adhérer à l'Amicale »</h3>
       <div class="card" style="text-align:center"><div id="eQr"></div><p class="note" style="word-break:break-all">${esc(url)}</p>
-      <div class="btns"><button class="btn gold" id="eAff">Imprimer l'affiche</button><button class="btn sec" id="eCopy">Copier le lien</button></div>
+      <div class="btns"><button class="btn gold" id="eAff">Affiche A4</button><button class="btn gold" id="eAff4">4 affichettes par page</button></div><div class="btns" style="margin-top:0"><button class="btn sec" id="eCopy">Copier le lien</button></div>
       <p class="note" style="margin-bottom:0">À mettre sur une table, sur le site ou dans un message. Le QR code d'une fiche précise se trouve dans la fiche de l'adhérent.</p></div>
       ${S._dem&&S._dem.length?`<h3>Derniers paiements en ligne</h3><div class="list">${S._dem.map(d=>{const m=membre(d.membreId),n=d.nouveau||{},[l,cl]=ST[d.statut]||[d.statut,""];
         return`<div class="row" ${d.membreId?`data-m="${esc(d.membreId)}"`:""}><div class="main"><b>${esc(m?fullName(m):`${n.prenom||""} ${(n.nom||"").toUpperCase()}`.trim()||"—")}</b><small>${new Date(d.cree).toLocaleString("fr-FR",{dateStyle:"short",timeStyle:"short"})}${d.fournisseur?" · "+esc(MODES[d.fournisseur]||d.fournisseur):""}${n.premiere?" · première adhésion":""}</small></div><div class="right">${eur(d.montant)}<br><span class="chip ${cl}">${esc(l)}</span></div></div>`;}).join("")}</div>`:""}`;
     const cv=qrCanvas(url,320);cv.style.cssText="width:220px;max-width:100%;height:auto";$("#eQr",el).appendChild(cv);
-    $("#eAff",el).onclick=()=>enLigneAffiche().catch(e=>toast(e.message));
+    $("#eAff",el).onclick=()=>enLigneAffiche(false).catch(e=>toast(e.message));$("#eAff4",el).onclick=()=>enLigneAffiche(true).catch(e=>toast(e.message));
     $("#eCopy",el).onclick=async()=>{try{await navigator.clipboard.writeText(url);toast("Lien copié");}catch(e){toast(url);}};
     $$("[data-m]",el).forEach(r=>r.onclick=()=>memberSheet(r.dataset.m));
     cmdListe($("#eCmd",el));
