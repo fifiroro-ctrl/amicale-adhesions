@@ -396,7 +396,7 @@ function maCaisse(uid){return S.paiements.filter(p=>p.mode==="especes"&&!p.remis
 function caisseAccueil(){
   const mine=S.paiementsAll.filter(p=>p.encaissePar===S.uid).sort((a,b)=>(b.cree||"").localeCompare(a.cree||""));
   const esp=maCaisse(S.uid),tot=esp.reduce((t,p)=>t+num(p.montant),0);
-  $("#acc").innerHTML=`
+  $("#acc").innerHTML=`<div id="qCmd"></div>
     <div class="btns"><button class="btn gold full big" id="qPay">+ Encaisser une cotisation</button></div>
     <div class="btns"><button class="btn sec" id="qMem">+ Nouvel adhérent</button></div>
     <div class="grid"><div class="stat"><b>${eur(tot)}</b><span>espèces à remettre au trésorier</span></div><div class="stat"><b>${mine.filter(p=>!p.annule).length}</b><span>encaissements saisis</span></div></div>
@@ -404,6 +404,7 @@ function caisseAccueil(){
     ${mine.length?`<div class="list">${mine.slice(0,8).map(payRow).join("")}</div><a class="back" href="#paiements">Tout voir ›</a>`:`<div class="empty">Aucun encaissement pour l'instant.</div>`}`;
   $("#qPay").onclick=()=>paySheet();$("#qMem").onclick=()=>memberSheet();
   $$("[data-p]").forEach(r=>r.onclick=()=>payDetail(r.dataset.p));
+  const qc=$("#qCmd");if(S._cmd)cmdListe(qc);cmdCharger().then(()=>{if(document.body.contains(qc))cmdListe(qc);}).catch(()=>{});
 }
 function payRow(p){const m=membre(p.membreId);return`<div class="row ${p.annule?"annule":""}" data-p="${esc(p.id)}"><div class="av">${m?esc(initials(m)):"?"}</div><div class="main"><b>${esc(m?fullName(m):p.nomAffiche)}</b><small>${fd(p.date)}${p.recuNum?" · "+esc(p.recuNum):""}${S.isAdmin&&p.encaissePar&&p.encaissePar!==S.uid?" · par "+esc(nomProfil(p.encaissePar)):""}</small></div><div class="right"><b>${eur(p.montant)}</b><br>${p.annule?'<span class="chip bad">Annulé</span>':`<span class="chip ${p.mode}">${MODES[p.mode]||esc(p.mode)}</span>`}${p.signalement&&!p.signalementTraite&&!p.annule?'<span class="chip warn">Signalé</span>':""}${p.compta?'<span class="chip ok">Compta</span>':""}</div></div>`;}
 
@@ -3046,6 +3047,25 @@ async function enLigneQrFiche(m){
     setTimeout(suivre,4000);
   });
 }
+// Commandes payées en ligne (livre, CD, mug) à remettre en main propre : administrateur et caissiers.
+async function cmdCharger(){
+  const {data,error}=await S.sb.from("demandes_paiement").select("id,membreId,nouveau,articles,livraison,payeLe,statut").in("statut",["payee","attente"]).is("livre",null).not("articles","is",null).order("payeLe");
+  S._cmd=error?[]:(data||[]).filter(d=>d.articles&&d.articles.length);return S._cmd;
+}
+function cmdNom(d){const m=membre(d.membreId),n=d.nouveau||{};return m?fullName(m):`${n.prenom||""} ${(n.nom||"").toUpperCase()}`.trim()||"—";}
+function cmdListe(el,apres){
+  const cmd=S._cmd||[];
+  el.innerHTML=cmd.length?`<h3>Commandes à remettre (${cmd.length})</h3><div class="list">${cmd.map(d=>{const L=d.livraison||{};return`<div class="row" style="cursor:default;align-items:flex-start"><div class="main"><b>${esc(cmdNom(d))}</b>
+      <small style="display:block;white-space:normal">${d.articles.map(a=>esc(a.titre)+(a.qte>1?" × "+a.qte:"")).join(" · ")}</small>
+      <small style="display:block">${L.mode==="envoi"?`À envoyer : ${esc([L.adresse,[L.cp,L.ville].filter(Boolean).join(" ")].filter(Boolean).join(", "))}`:"À remettre en main propre"} · payé le ${d.payeLe?new Date(d.payeLe).toLocaleDateString("fr-FR"):"—"}</small></div>
+      <div class="right"><button class="btn sm gold" data-livre="${esc(d.id)}">${L.mode==="envoi"?"Envoyé":"Remis"}</button></div></div>`;}).join("")}</div>`:"";
+  $$("[data-livre]",el).forEach(b=>b.onclick=async e=>{e.stopPropagation();
+    const d=cmd.find(x=>x.id===b.dataset.livre);
+    if(!await confirmBox(`Remis à ${cmdNom(d)} : ${d.articles.map(a=>a.titre+(a.qte>1?" × "+a.qte:"")).join(", ")} ?`,"Remis",false))return;
+    const {error}=await S.sb.from("demandes_paiement").update({livre:new Date().toISOString(),livrePar:S.uid}).eq("id",d.id);
+    if(error)return toast("Impossible : "+errMsg(error));
+    S._cmd=cmd.filter(x=>x.id!==d.id);toast("C'est noté");cmdListe(el,apres);if(apres)apres();});
+}
 // Affiche A4 à imprimer : logo, cotisation et QR code de la page publique.
 async function enLigneAffiche(){
   const J=window.jspdf&&window.jspdf.jsPDF;if(!J)return toast("Module PDF non chargé : vérifiez la connexion");
@@ -3078,19 +3098,14 @@ VIEWS.enligne={
   bind(){
     VIEWS.enligne.update();
     S.sb.from("demandes_paiement").select("*").order("cree",{ascending:false}).limit(30).then(({data,error})=>{S._dem=error?null:data;VIEWS.enligne.update();});
-    S.sb.from("demandes_paiement").select("*").in("statut",["payee","attente"]).is("livre",null).not("articles","is",null).order("payeLe").then(({data,error})=>{S._cmd=error?[]:(data||[]).filter(d=>d.articles&&d.articles.length);VIEWS.enligne.update();});
+    cmdCharger().then(()=>VIEWS.enligne.update());
     payerAppel({action:"verifier"}).then(x=>{if(x&&x.enregistres){toast(`${x.enregistres} paiement${x.enregistres>1?"s":""} en ligne enregistré${x.enregistres>1?"s":""}`);reload();}}).catch(()=>{});
   },
   update(){
     const el=$("#eBody");if(!el)return;
     const url=enLigneUrl("1"),av=S.membres.filter(m=>m.aVerifier);
     const ST={cree:["Créée",""],lancee:["En cours","warn"],traitement:["En cours","warn"],payee:["Payée","ok"],attente:["Compte d'attente","warn"],echec:["Échouée","bad"]};
-    const qn=d=>{const m=membre(d.membreId),n=d.nouveau||{};return m?fullName(m):`${n.prenom||""} ${(n.nom||"").toUpperCase()}`.trim()||"—";};
-    const cmd=S._cmd||[];
-    el.innerHTML=`${cmd.length?`<h3>Commandes à remettre ou à envoyer</h3><div class="list">${cmd.map(d=>{const L=d.livraison||{};return`<div class="row" style="cursor:default;align-items:flex-start"><div class="main"><b>${esc(qn(d))}</b>
-        <small style="display:block">${d.articles.map(a=>esc(a.titre)+(a.qte>1?" × "+a.qte:"")).join(" · ")}</small>
-        <small style="display:block">${L.mode==="envoi"?`À envoyer : ${esc([L.adresse,[L.cp,L.ville].filter(Boolean).join(" ")].filter(Boolean).join(", "))}`:"À remettre en main propre"} · payé le ${d.payeLe?new Date(d.payeLe).toLocaleDateString("fr-FR"):"—"}</small></div>
-        <div class="right"><button class="btn sm" data-livre="${esc(d.id)}">${L.mode==="envoi"?"Envoyé":"Remis"}</button></div></div>`;}).join("")}</div>`:""}
+    el.innerHTML=`<div id="eCmd"></div>
       ${av.length?`<h3>Nouvelles fiches à vérifier</h3><div class="list">${av.map(m=>`<div class="row" data-m="${esc(m.id)}"><div class="main"><b>${esc(fullName(m))}</b><small>${esc(m.aVerifier)}</small></div><div class="right">›</div></div>`).join("")}</div>`:""}
       <h3>Page publique « Adhérer à l'Amicale »</h3>
       <div class="card" style="text-align:center"><div id="eQr"></div><p class="note" style="word-break:break-all">${esc(url)}</p>
@@ -3102,9 +3117,7 @@ VIEWS.enligne={
     $("#eAff",el).onclick=()=>enLigneAffiche().catch(e=>toast(e.message));
     $("#eCopy",el).onclick=async()=>{try{await navigator.clipboard.writeText(url);toast("Lien copié");}catch(e){toast(url);}};
     $$("[data-m]",el).forEach(r=>r.onclick=()=>memberSheet(r.dataset.m));
-    $$("[data-livre]",el).forEach(b=>b.onclick=async e=>{e.stopPropagation();
-      const {error}=await S.sb.from("demandes_paiement").update({livre:new Date().toISOString()}).eq("id",b.dataset.livre);
-      if(error)return toast("Impossible : "+errMsg(error));S._cmd=(S._cmd||[]).filter(d=>d.id!==b.dataset.livre);toast("C'est noté");VIEWS.enligne.update();});
+    cmdListe($("#eCmd",el));
   }
 };
 
