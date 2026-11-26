@@ -2978,9 +2978,13 @@ async function enLignePage(t){
       if(r.statut==="payee"||r.statut==="attente"||r.statut==="traitement")return enLigneRetour(t);
       Object.assign(EL,{cat:r.catalogue||[],aJour:!!r.aJour,qr:true,minQr:r.unitaire||r.montant});
       const v=enLigneCadre(`<h2 style="margin:0 0 6px;text-align:center">${esc(r.prenom)} ${esc(String(r.nom||"").toUpperCase())}</h2>
+        ${r.sansMail?`<label class="f"><span>Votre mail <i>*</i></span><input id="eM" type="email" autocomplete="email" autocapitalize="off"></label>`:""}
         ${enLigneSections(r)}${enLigneBoutons(r.fournisseurs)}`);
       enLigneBoutique(v);
-      enLigneLier(v,()=>{const c=enLigneCommande();return c?{id:t,...c}:null;});
+      enLigneLier(v,()=>{
+        let email="";
+        if(r.sansMail){email=$("#eM",v).value.trim();if(!email){toast("Indiquez votre adresse mail");return null;}if(!mailOk(email)){toast("Adresse mail invalide");return null;}}
+        const c=enLigneCommande();return c?{id:t,email,...c}:null;});
       return;
     }
     const r=await payerAppel({action:"config"});
@@ -2989,7 +2993,7 @@ async function enLignePage(t){
       <p style="text-align:center;margin:0 0 10px">Cotisation minimale par année : ${eurTxt(EL.min.actif)} pour les actifs et retraités de la Musique, ${eurTxt(EL.min.sympathisant)} pour les sympathisants.</p>
       <div class="two"><label class="f"><span>Prénom <i>*</i></span><input id="eP" autocomplete="given-name" autocapitalize="words"></label>
       <label class="f"><span>Nom <i>*</i></span><input id="eN" autocomplete="family-name" autocapitalize="characters"></label></div>
-      <label class="f"><span>Mail (pour recevoir le reçu)</span><input id="eM" type="email" autocomplete="email" autocapitalize="off"></label>
+      <label class="f"><span>Mail <i>*</i></span><input id="eM" type="email" autocomplete="email" autocapitalize="off"></label>
       <label class="f"><span>Téléphone (facultatif)</span><input id="eT" type="tel" autocomplete="tel"></label>
       ${enLigneSections(r)}${enLigneBoutons(r.fournisseurs)}
       <p class="note" style="margin-top:12px">Vos coordonnées servent uniquement à la gestion des adhésions et des commandes de l'Amicale.</p>`);
@@ -2998,7 +3002,8 @@ async function enLignePage(t){
     enLigneLier(v,()=>{
       const prenom=$("#eP",v).value.trim(),nom=$("#eN",v).value.trim(),email=$("#eM",v).value.trim();
       if(!prenom||!nom){toast("Indiquez votre prénom et votre nom");return null;}
-      if(email&&!mailOk(email)){toast("Adresse mail invalide");return null;}
+      if(!email){toast("Indiquez votre adresse mail");return null;}
+      if(!mailOk(email)){toast("Adresse mail invalide");return null;}
       const c=enLigneCommande();if(!c)return null;
       return {prenom,nom,email,tel:$("#eT",v).value.trim(),premiere:EL.g.premiere==="oui",sympathisant:EL.g.statut==="sympathisant",...c};
     });
@@ -3167,11 +3172,11 @@ async function caisseSheet(mid){
       const LG=lignes();
       el.innerHTML=`
         <div class="f"><span>Qui ?</span>
-        ${mm?`<div class="card" style="display:flex;align-items:center;gap:10px;margin:0"><div style="flex:1"><b>${esc(fullName(mm))}</b><div style="margin-top:4px">${etat} ${mm.categorie?`<span class="chip">${esc(mm.categorie)}</span>`:""}</div></div>${mid?"":`<button class="btn sm sec" data-k="changer">Changer</button>`}</div>`
+        ${mm?`<div class="card" style="display:flex;align-items:center;gap:10px;margin:0"><div style="flex:1"><b>${esc(fullName(mm))}</b><div style="margin-top:4px">${etat} ${mm.categorie?`<span class="chip">${esc(mm.categorie)}</span>`:""}</div></div>${mid?"":`<button class="btn sm sec" data-k="changer">Changer</button>`}</div>${mails(mm.email).some(mailOk)?"":`<label class="f" style="margin:8px 0 0"><span>Mail <i>*</i> (absent de sa fiche)</span><input id="kM" type="email" inputmode="email" autocapitalize="off" autocomplete="off"></label>`}`
         :T.qui==="nouveau"||T.qui==="libre"?`<div class="card" style="margin:0"><div style="display:flex;justify-content:space-between;align-items:center"><b>${T.qui==="nouveau"?"Nouvel adhérent":"Acheteur non adhérent"}</b><button class="btn sm sec" data-k="changer">Changer</button></div>
-            <div class="two"><label class="f"><span>Prénom${T.qui==="nouveau"?" <i>*</i>":""}</span><input id="kP" autocapitalize="words" autocomplete="off"></label><label class="f"><span>Nom${T.qui==="nouveau"?" <i>*</i>":""}</span><input id="kN" autocapitalize="characters" autocomplete="off"></label></div>
-            ${T.qui==="nouveau"?`<div class="two"><label class="f"><span>Mail</span><input id="kM" inputmode="email" autocapitalize="off" autocomplete="off"></label><label class="f"><span>Téléphone</span><input id="kT" type="tel" autocomplete="off"></label></div>
-            <div class="paves p2" style="margin-top:4px">${pave("statut","actif","Actif","musicien ou administratif, actif ou retraité",T.statut==="actif")}${pave("statut","sympathisant","Sympathisant","",T.statut==="sympathisant")}</div>`:""}</div>`
+            <div class="two"><label class="f"><span>Prénom <i>*</i></span><input id="kP" autocapitalize="words" autocomplete="off"></label><label class="f"><span>Nom <i>*</i></span><input id="kN" autocapitalize="characters" autocomplete="off"></label></div>
+            <div class="two"><label class="f"><span>Mail <i>*</i></span><input id="kM" type="email" inputmode="email" autocapitalize="off" autocomplete="off"></label><label class="f"><span>Téléphone</span><input id="kT" type="tel" autocomplete="off"></label></div>
+            ${T.qui==="nouveau"?`<div class="paves p2" style="margin-top:4px">${pave("statut","actif","Actif","musicien ou administratif, actif ou retraité",T.statut==="actif")}${pave("statut","sympathisant","Sympathisant","",T.statut==="sympathisant")}</div>`:""}</div>`
         :`<input id="kQ" type="search" placeholder="Tapez quelques lettres du nom…" value="${esc(T.q)}" autocomplete="off">
           ${res.length?`<div class="list" style="margin:6px 0 0">${res.map(x=>`<div class="row" data-mid="${esc(x.id)}"><div class="av">${esc(initials(x))}</div><div class="main"><b>${esc(fullName(x))}</b><small>${esc([x.categorie,x.instrument].filter(Boolean).join(" · ")||"—")}</small></div><div class="right">${payeesDe(x.id).length?'<span class="chip ok">À jour</span>':'<span class="chip bad">À régler</span>'}</div></div>`).join("")}</div>`:T.q.length>=2?`<p class="note">Personne à ce nom.</p>`:""}
           <div class="paves p2" style="margin-top:8px">${pave("qui","nouveau","Nouvel adhérent","",false)}${pave("qui","libre","Non adhérent","achat seul",false)}</div>`}
@@ -3192,7 +3197,7 @@ async function caisseSheet(mid){
           ${T.mode?`<button class="btn gold full big" data-k="valider">${T.mode==="tel"?"Afficher le QR code":`Valider · ${eurTxt(total())}`}</button>`:`<p class="note" style="text-align:center;font-size:15px">Touchez le mode de règlement : Espèces, SumUp, Chèque…</p>`}`:""}
         ${S.isAdmin?`<p class="note" style="text-align:center;margin-top:12px"><a href="#" class="lnk" data-k="detail">Saisie détaillée (date, virement, prélèvement…)</a></p>`:""}`;
       const q=$("#kQ",el);if(q){q.oninput=()=>{T.q=q.value;const pos=q.selectionStart;rendre();const q2=$("#kQ",el);q2.focus();try{q2.setSelectionRange(pos,pos);}catch(e){}};}
-      if(T.qui==="nouveau"||T.qui==="libre"){["kP","kN","kM","kT"].forEach(id=>{const i=$("#"+id,el);if(i){i.value=T[id]||"";i.oninput=()=>{T[id]=i.value;};}});}
+      {["kP","kN","kM","kT"].forEach(id=>{const i=$("#"+id,el);if(i){i.value=T[id]||"";i.oninput=()=>{T[id]=i.value;};}});}
       const dn=$("#kDon",el);if(dn)dn.oninput=()=>{T.don=Math.max(0,Math.min(500,num(dn.value)));const t=$('[data-k="valider"]',el);if(t&&T.mode!=="tel")t.textContent=`Valider · ${eurTxt(total())}`;};
       const kr=$("#kRef",el);if(kr)kr.oninput=()=>{T.ref=kr.value;};
     };
@@ -3218,15 +3223,25 @@ async function caisseSheet(mid){
 async function caisseValider(T,F){
   const LG=F.lignes();if(!LG.length)return toast("Choisissez une cotisation ou un achat");
   let mm=F.m();
+  const email=mails(T.kM||"").join(", ");
+  if(!mm||!mails(mm.email).some(mailOk)){
+    if(!email)return toast("L'adresse mail est obligatoire");
+    if(mails(T.kM||"").some(x=>!mailOk(x)))return toast("Adresse mail invalide");
+  }
+  if(T.qui==="libre"&&!((T.kP||"").trim()&&(T.kN||"").trim()))return toast("Prénom et nom de l'acheteur obligatoires");
   if(T.qui==="nouveau"){
     const prenom=(T.kP||"").trim(),nom=(T.kN||"").trim();
     if(!prenom||!nom)return toast("Prénom et nom du nouvel adhérent obligatoires");
-    const email=mails(T.kM||"").join(", ");if(mails(T.kM||"").some(x=>!mailOk(x)))return toast("Adresse mail invalide");
     const dup=S.membres.find(x=>norm(x.nom)===norm(nom)&&norm(x.prenom)===norm(prenom));
     if(dup&&!await confirmBox(`${fullName(dup)} existe déjà. L'utiliser plutôt que de créer une nouvelle fiche ?`,"Utiliser cette fiche",false)){}
     else if(dup){mm=dup;}
     if(!mm){const nid=uid(),nm={nom:nom.toUpperCase(),prenom,categorie:T.statut==="sympathisant"?"Sympathisant":"",instrument:"",email,tel:(T.kT||"").trim(),actif:true,potentiel:false,source:"Encaissé à la table",cree:new Date().toISOString()};
       if(!await put("membres/"+nid,nm))return;mm={id:nid,...nm};}
+  }
+  if(mm&&!mails(mm.email).some(mailOk)){
+    const {error}=await S.sb.rpc("completer_mail",{p_id:mm.id,p_mail:email});
+    if(error)return toast("Mail non enregistré : "+errMsg(error));
+    mm.email=email;const fm=S.membres.find(x=>x.id===mm.id);if(fm)fm.email=email;
   }
   if(T.mode==="tel"){
     if(mm){closeSheet();return enLigneQrFiche(mm);}
@@ -3239,7 +3254,7 @@ async function caisseValider(T,F){
   const L=F.L(),mn=F.minimum(),pays=[],ventes=[];
   if(L.length&&mm){const par=Math.round((mn+T.don/L.length)*100)/100;
     L.forEach(s=>pays.push(clean("paiements",{id:uid(),membreId:mm.id,nomAffiche:fullName(mm),saison:s,montant:par,cotis:mn,mode:T.mode,date,ref,note:`À la table · lot ${lot}`,compta:"",cree:new Date().toISOString()})));}
-  LG.filter(x=>x.a).forEach(x=>ventes.push({id:uid(),date,categorie:x.a.type,produit:x.l,montant:x.m,mode:T.mode,acheteur:nomAff,email:mm?(mails(mm.email)[0]||""):"",boutique:"Table",ref,commande:`table-${lot}`,membreId:mm?mm.id:null}));
+  LG.filter(x=>x.a).forEach(x=>ventes.push({id:uid(),date,categorie:x.a.type,produit:x.l,montant:x.m,mode:T.mode,acheteur:nomAff,email:mm?(mails(mm.email)[0]||""):(mails(T.kM||"")[0]||""),boutique:"Table",ref,commande:`table-${lot}`,membreId:mm?mm.id:null}));
   try{
     let rows=[];
     if(pays.length)rows=await chk(S.sb.from("paiements").insert(pays).select());
