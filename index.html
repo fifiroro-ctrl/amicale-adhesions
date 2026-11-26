@@ -241,7 +241,7 @@ const COLS={
   paiements:["id","membreId","nomAffiche","saison","montant","cotis","mode","date","ref","note","recuNum","compta","encaissePar","annule","annulePar","annuleLe","annuleMotif","signalement","signalementLe","signalementTraite","remisLe","cree"],
   evenements:["id","titre","date","heure","lieu","places","description"]
 ,
-  ventes:["id","date","categorie","produit","montant","mode","acheteur","email","boutique","ref","commande","annule","compta"]};
+  ventes:["id","date","categorie","produit","montant","mode","acheteur","email","boutique","ref","commande","annule","compta","membreId","encaissePar","remisLe"]};
 const NULLABLE=new Set(["montantPerso","derniereRelance","modifie","dateSignature","compta","remisLe","annuleLe","annulePar","places","cotis","signalementLe","membreId","encaissePar"]);
 function clean(t,o){const r={};for(const k of COLS[t]){if(o[k]===undefined)continue;let v=o[k];if(v===""&&NULLABLE.has(k))v=null;r[k]=v;}return r;}
 function errMsg(e){if(!e)return"erreur";const m=e.message||String(e);if(/row-level security|permission|42501/i.test(m))return"vous n'avez pas les droits pour cette action";if(/check constraint/i.test(m))return"donnée refusée (saison ou date avant 2026 ?)";if(/duplicate key/i.test(m))return"cet élément existe déjà";if(/Failed to fetch|NetworkError/i.test(m))return"pas de connexion";return m;}
@@ -364,7 +364,7 @@ VIEWS.accueil={
     if(S.isAdmin&&attente)todo.push([`${attente} règlement${attente>1?"s":""} en compte d'attente à affecter`,"#ventes","warn"]);
     const sig=S.paiementsAll.filter(p=>p.signalement&&!p.signalementTraite&&!p.annule).length;
     if(sig)todo.unshift([`${sig} erreur${sig>1?"s":""} signalée${sig>1?"s":""} par les caissiers`,"#caisses","bad"]);
-    const esp=S.paiements.filter(p=>p.mode==="especes"&&!p.remisLe&&p.encaissePar&&p.encaissePar!==S.uid).reduce((t,p)=>t+num(p.montant),0);
+    const esp=S.profils.filter(pr=>pr.id!==S.uid).reduce((t,pr)=>t+maCaisse(pr.id).reduce((s,p)=>s+num(p.montant),0),0);
     if(esp>0)todo.push([`${eur(esp)} d'espèces encore chez les caissiers`,"#caisses","warn"]);
     if(pots.length)todo.push([`${pots.length} adhérent${pots.length>1?"s":""} potentiel${pots.length>1?"s":""} à convaincre`,"#adherents","pot"]);
     $("#acc").innerHTML=`
@@ -387,22 +387,22 @@ VIEWS.accueil={
       </div>
       ${prel?`<p class="note">${prel} adhérent${prel>1?"s":""} en prélèvement.</p>`:""}
       </div></div>`;
-    $("#qPay").onclick=()=>paySheet();$("#qMem").onclick=()=>memberSheet();
+    $("#qPay").onclick=()=>caisseSheet();$("#qMem").onclick=()=>memberSheet();
     $$("[data-evt]").forEach(r=>r.onclick=()=>eventSheet(r.dataset.evt));
   }
 };
 
-function maCaisse(uid){return S.paiements.filter(p=>p.mode==="especes"&&!p.remisLe&&p.encaissePar===uid);}
+function maCaisse(uid){return [...S.paiements.filter(p=>p.mode==="especes"&&!p.remisLe&&p.encaissePar===uid),...(S.ventesAll||S.ventesMine||[]).filter(v=>v.mode==="especes"&&!v.remisLe&&!v.annule&&v.encaissePar===uid).map(v=>({...v,_v:true}))];}
 function caisseAccueil(){
   const mine=S.paiementsAll.filter(p=>p.encaissePar===S.uid).sort((a,b)=>(b.cree||"").localeCompare(a.cree||""));
   const esp=maCaisse(S.uid),tot=esp.reduce((t,p)=>t+num(p.montant),0);
   $("#acc").innerHTML=`<div id="qCmd"></div>
-    <div class="btns"><button class="btn gold full big" id="qPay">+ Encaisser une cotisation</button></div>
+    <div class="btns"><button class="btn gold full big" id="qPay">+ Encaisser</button></div>
     <div class="btns"><button class="btn sec" id="qMem">+ Nouvel adhérent</button></div>
     <div class="grid"><div class="stat"><b>${eur(tot)}</b><span>espèces à remettre au trésorier</span></div><div class="stat"><b>${mine.filter(p=>!p.annule).length}</b><span>encaissements saisis</span></div></div>
     <h3>Mes derniers encaissements</h3>
     ${mine.length?`<div class="list">${mine.slice(0,8).map(payRow).join("")}</div><a class="back" href="#paiements">Tout voir ›</a>`:`<div class="empty">Aucun encaissement pour l'instant.</div>`}`;
-  $("#qPay").onclick=()=>paySheet();$("#qMem").onclick=()=>memberSheet();
+  $("#qPay").onclick=()=>caisseSheet();$("#qMem").onclick=()=>memberSheet();
   $$("[data-p]").forEach(r=>r.onclick=()=>payDetail(r.dataset.p));
   const qc=$("#qCmd");if(S._cmd)cmdListe(qc);cmdCharger().then(()=>{if(document.body.contains(qc))cmdListe(qc);}).catch(()=>{});
 }
@@ -422,7 +422,8 @@ VIEWS.caisses={
     $$("[data-p]").forEach(r=>r.onclick=()=>payDetail(r.dataset.p));
     $$("[data-remis]").forEach(b=>b.onclick=async()=>{const pr=S.profils.find(x=>x.id===b.dataset.remis),L=maCaisse(pr.id),tot=L.reduce((t,p)=>t+num(p.montant),0);
       if(!await confirmBox(`Confirmer que ${pr.nom} vous a remis ${eurTxt(tot)} en espèces (${L.length} encaissement${L.length>1?"s":""}) ?`,"Confirmer",false))return;
-      try{await chk(S.sb.from("paiements").update({remisLe:today()}).in("id",L.map(p=>p.id)));toast("Remise enregistrée");reload();}catch(e){toast("Impossible : "+errMsg(e));}});
+      try{const P=L.filter(p=>!p._v).map(p=>p.id),V=L.filter(p=>p._v).map(p=>p.id);
+        if(P.length)await chk(S.sb.from("paiements").update({remisLe:today()}).in("id",P));if(V.length)await chk(S.sb.from("ventes").update({remisLe:today()}).in("id",V));toast("Remise enregistrée");reload();}catch(e){toast("Impossible : "+errMsg(e));}});
   }
 };
 
@@ -468,7 +469,7 @@ VIEWS.paiements={
     $("#pm").value=S.pMode;
     $("#ps").onchange=e=>{S.pSaison=e.target.value;this.update();};
     $("#pm").onchange=e=>{S.pMode=e.target.value;this.update();};
-    $("#pAdd").onclick=()=>paySheet();
+    $("#pAdd").onclick=()=>caisseSheet();
   },
   update(){
     $("#ban").innerHTML=dataBanner();
@@ -836,16 +837,26 @@ async function suCharger(){
 }
 // En cas de doute (pas de libellé exploitable, ou adhérent non reconnu) : compte d'attente par défaut.
 const suDoute=t=>!t.type||(t.type==="cotisation"&&!t.membre);
+// Encaissements SumUp saisis à la table (même jour, même total) : proposés « À écarter » pour éviter les doublons.
+function suLotsTable(){
+  const lots={};const add=(k,x,n)=>{if(!k)return;(lots[k]=lots[k]||{date:x.date,tot:0,par:x.encaissePar,noms:new Set()});lots[k].tot=r2(lots[k].tot+num(x.montant));if(n)lots[k].noms.add(n);};
+  S.paiements.filter(p=>p.mode==="sumup").forEach(p=>{const k=(String(p.note||"").match(/lot (\w+)/)||[])[1];add(k,p,p.nomAffiche);});
+  (S.ventesAll||[]).filter(v=>v.mode==="sumup"&&!v.annule&&String(v.commande||"").startsWith("table-")).forEach(v=>add(v.commande.slice(6),v,v.acheteur));
+  return lots;
+}
 function suRendre(){
   const box=$("#suL");if(!box)return;const L=S._su||[];
+  if(L.length&&L.some(t=>t._tb===undefined)){const lots=suLotsTable(),pris=new Set(L.map(t=>t._lot).filter(Boolean));
+    L.forEach(t=>{if(t._tb!==undefined)return;t._tb="";const k=Object.keys(lots).find(k=>!pris.has(k)&&lots[k].date===t.date&&Math.abs(lots[k].tot-num(t.montant))<0.01);
+      if(k){pris.add(k);t._lot=k;t.type="ignore";t._tb=`Déjà saisi à la table par ${nomProfil(lots[k].par)} (${[...lots[k].noms].join(", ")})`;}});}
   if(!L.length){box.innerHTML=`<div class="banner ok" style="margin-top:10px">Aucun paiement SumUp à rattacher.</div>`;return;}
   const mem=membresTri(),sais=[String(cfg().saison),String(+cfg().saison+1)];
   const optM=sel=>`<option value="">— Adhérent —</option>`+mem.map(m=>`<option value="${esc(m.id)}" ${m.id===sel?"selected":""}>${esc(fullName(m))}</option>`).join("");
   box.innerHTML=`<p class="note" style="margin-top:10px">${L.length} paiement${L.length>1?"s":""} à rattacher. Les propositions viennent du libellé saisi au terminal : vérifiez-les. En cas de doute, le règlement va en compte d'attente : vous l'affecterez plus tard depuis Plus › Ventes.</p>
     ${L.map((t,i)=>`<div class="card" data-su="${i}" style="margin:8px 0;padding:12px">
       <div style="display:flex;justify-content:space-between;gap:8px"><b>${eur(t.montant)}</b><small class="note" style="margin:0">${fd(t.date)}${t.heure?" "+esc(t.heure):""}</small></div>
-      <div style="margin:4px 0">${esc(t.libelle||"(sans libellé)")}</div><small class="note" style="margin:0">Encaissé par ${esc(t.caissier||"—")}</small>
-      <div class="two" style="margin-top:8px"><select data-k="type"><option value="">— Choisir —</option><option value="cotisation" ${t.type==="cotisation"&&!suDoute(t)?"selected":""}>Cotisation</option><option value="livres" ${t.type==="livres"?"selected":""}>Vente de livre</option><option value="cd" ${t.type==="cd"?"selected":""}>Vente de CD</option><option value="attente" ${suDoute(t)?"selected":""}>Compte d'attente</option><option value="ignore">À écarter</option></select>
+      <div style="margin:4px 0">${esc(t.libelle||"(sans libellé)")}</div><small class="note" style="margin:0">Encaissé par ${esc(t.caissier||"—")}</small>${t._tb?`<div class="banner ok" style="margin:6px 0 0;padding:6px 10px;font-size:13px">${esc(t._tb)} : à écarter.</div>`:""}
+      <div class="two" style="margin-top:8px"><select data-k="type"><option value="">— Choisir —</option><option value="cotisation" ${t.type==="cotisation"&&!suDoute(t)?"selected":""}>Cotisation</option><option value="livres" ${t.type==="livres"?"selected":""}>Vente de livre</option><option value="cd" ${t.type==="cd"?"selected":""}>Vente de CD</option><option value="attente" ${suDoute(t)?"selected":""}>Compte d'attente</option><option value="ignore" ${t.type==="ignore"?"selected":""}>À écarter</option></select>
       <select data-k="saison" ${t.type==="cotisation"&&!suDoute(t)?"":"hidden"}>${sais.map(s=>`<option ${s===(t.saison||String(t.date).slice(0,4))?"selected":""}>${s}</option>`).join("")}</select></div>
       <select data-k="membre" style="margin-top:8px" ${t.type==="cotisation"&&!suDoute(t)?"":"hidden"}>${optM(t.membre)}</select>
       <button class="btn sm full" data-ok="${i}" style="margin-top:8px">Valider</button></div>`).join("")}
@@ -1101,7 +1112,7 @@ function memberSheet(id){
       if(await put("membres/"+newId,d)){toast("Fiche enregistrée");closeSheet();}
     };
     if(id){
-      $("#fPay",p).onclick=()=>paySheet(id);
+      $("#fPay",p).onclick=()=>caisseSheet(id);
       $("#fDel",p).onclick=async()=>{if(await confirmBox(`Supprimer ${fullName(m)} ? Ses cotisations déjà enregistrées restent dans l'historique. Pour un ancien membre, préférez décocher « Fiche active ».`,"Supprimer")){if(await del("membres/"+id)){toast("Fiche supprimée");closeSheet();}}};
       $$("[data-p]",p).forEach(r=>r.onclick=()=>payDetail(r.dataset.p));
     }
@@ -1113,7 +1124,7 @@ function ficheCaissier(m){
   openSheet(fullName(m),`<div class="card"><p style="margin:0">${statusChips(m)}</p><p class="note">${esc([m.categorie,m.instrument,m.service].filter(Boolean).join(" · ")||"—")}</p></div>
     <h3>Cotisations</h3>${hist.length?`<div class="list">${hist.map(p=>`<div class="row" style="cursor:default"><div class="main"><b>${esc(p.saison)}</b><small>${fd(p.date)}</small></div><div class="right">${eur(p.montant)}<br><span class="chip ${p.mode}">${MODES[p.mode]||esc(p.mode)}</span></div></div>`).join("")}</div>`:`<div class="note">Aucune cotisation enregistrée.</div>`}
     <button class="btn gold full" id="fcPay">+ Encaisser pour ${esc(m.prenom)}</button>
-    <p class="note">Une correction à faire sur cette fiche ? Signalez-la au trésorier.</p>`,p=>{$("#fcPay",p).onclick=()=>paySheet(m.id);});
+    <p class="note">Une correction à faire sur cette fiche ? Signalez-la au trésorier.</p>`,p=>{$("#fcPay",p).onclick=()=>caisseSheet(m.id);});
 }
 
 /* ----- Encaissement ----- */
@@ -1375,7 +1386,8 @@ async function loadAll(){
     S.paiementsAll=pa.data.map(p=>({...p,montant:num(p.montant),cotis:p.cotis==null?null:num(p.cotis)}));S.paiements=S.paiementsAll.filter(p=>!p.annule);
     S.evenements=ev.data;S.inscriptions=ins.data;S.offline=false;
     if(S.isAdmin){const ca=await S.sb.from("cartes").select("*");S.cartes=ca.error?null:ca.data;}else S.cartes=null;
-    if(S.isAdmin){const ve=await S.sb.from("ventes").select("*");S.ventesAll=ve.error?null:ve.data.map(v=>({...v,montant:num(v.montant)}));}else S.ventesAll=null;
+    if(S.isAdmin){const ve=await S.sb.from("ventes").select("*");S.ventesAll=ve.error?null:ve.data.map(v=>({...v,montant:num(v.montant)}));}
+    else{S.ventesAll=null;const ve=await S.sb.from("ventes").select("*").eq("encaissePar",S.uid);S.ventesMine=ve.error?[]:ve.data.map(v=>({...v,montant:num(v.montant)}));}
   }catch(e){S.offline=true;console.error(e);}
   refresh();
 }
@@ -3120,6 +3132,115 @@ VIEWS.enligne={
     cmdListe($("#eCmd",el));
   }
 };
+
+/* ----- Encaisser à la table (caissiers et administrateur) : même présentation en pavés que la page publique ----- */
+let CATALOGUE_CACHE=null;
+async function catalogue(){if(CATALOGUE_CACHE)return CATALOGUE_CACHE;try{const r=await payerAppel({action:"config"});CATALOGUE_CACHE=r.catalogue||[];}catch(e){CATALOGUE_CACHE=[];}return CATALOGUE_CACHE;}
+const saisonsCaisse=()=>[String(cfg().saison),String(+cfg().saison+1)];
+const payeesDe=mid=>saisonsCaisse().filter(s=>paysSaison(mid,s).length);
+async function caisseSheet(mid){
+  const cat=await catalogue();
+  const T={qui:mid?"membre":"",mid:mid||"",q:"",statut:"actif",cotis:"",don:0,q2:{},ouvert:"",mode:"especes",ref:""};
+  const types=Object.keys(ACHATS).filter(t=>cat.some(p=>p.type===t));
+  openSheet("Encaisser",`<div id="kx"></div>`,p=>{
+    const el=$("#kx",p);
+    const m=()=>T.qui==="membre"?membre(T.mid):null;
+    const libres=()=>T.qui==="membre"?saisonsCaisse().filter(s=>!paysSaison(T.mid,s).length):T.qui==="nouveau"?saisonsCaisse():[];
+    const minimum=()=>T.qui==="membre"?montantDu(m()):T.statut==="sympathisant"?(num(cfg().montantSympathisant)||20):num(cfg().montant);
+    const L=()=>T.cotis?T.cotis.split(","):[];
+    const adh=()=>L().length>0||(T.qui==="membre"&&payeesDe(T.mid).length>0);
+    const lignes=()=>{const out=[],mn=minimum();if(L().length)out.push({k:"cotis",l:`Cotisation ${L().join(" et ")}`,m:mn*L().length+T.don});
+      cat.forEach(a=>{const q=T.q2[a.code]||0;if(q)out.push({k:a.code,a,q,l:`${a.titre}${q>1?" × "+q:""}`,m:q*(adh()?a.prixAdherent:a.prix)});});return out;};
+    const total=()=>lignes().reduce((t,x)=>t+x.m,0);
+    const rendre=()=>{
+      const mm=m(),lib=libres(),cot=[...lib.map(x=>[x,x]),...(lib.length>1?[[lib.join(","),lib.map(x=>x.slice(2)).join("&")]]:[])];
+      if(T.cotis&&!cot.some(c=>c[0]===T.cotis))T.cotis="";
+      const res=T.q.length>=2?membresTri().filter(x=>x.actif!==false&&norm(x.nom+x.prenom+(x.instrument||"")).includes(norm(T.q))).slice(0,6):[];
+      const etat=mm?(()=>{const P=payeesDe(mm.id);return P.length?`<span class="chip ok">Adhérent à jour ${P.join(" et ")}</span>`:`<span class="chip bad">Pas encore à jour</span>`;})():"";
+      const LG=lignes();
+      el.innerHTML=`
+        <div class="f"><span>Qui ?</span>
+        ${mm?`<div class="card" style="display:flex;align-items:center;gap:10px;margin:0"><div style="flex:1"><b>${esc(fullName(mm))}</b><div style="margin-top:4px">${etat} ${mm.categorie?`<span class="chip">${esc(mm.categorie)}</span>`:""}</div></div>${mid?"":`<button class="btn sm sec" data-k="changer">Changer</button>`}</div>`
+        :T.qui==="nouveau"||T.qui==="libre"?`<div class="card" style="margin:0"><div style="display:flex;justify-content:space-between;align-items:center"><b>${T.qui==="nouveau"?"Nouvel adhérent":"Acheteur non adhérent"}</b><button class="btn sm sec" data-k="changer">Changer</button></div>
+            <div class="two"><label class="f"><span>Prénom${T.qui==="nouveau"?" <i>*</i>":""}</span><input id="kP" autocapitalize="words" autocomplete="off"></label><label class="f"><span>Nom${T.qui==="nouveau"?" <i>*</i>":""}</span><input id="kN" autocapitalize="characters" autocomplete="off"></label></div>
+            ${T.qui==="nouveau"?`<div class="two"><label class="f"><span>Mail</span><input id="kM" inputmode="email" autocapitalize="off" autocomplete="off"></label><label class="f"><span>Téléphone</span><input id="kT" type="tel" autocomplete="off"></label></div>
+            <div class="paves p2" style="margin-top:4px">${pave("statut","actif","Actif","musicien ou administratif, actif ou retraité",T.statut==="actif")}${pave("statut","sympathisant","Sympathisant","",T.statut==="sympathisant")}</div>`:""}</div>`
+        :`<input id="kQ" type="search" placeholder="Tapez quelques lettres du nom…" value="${esc(T.q)}" autocomplete="off">
+          ${res.length?`<div class="list" style="margin:6px 0 0">${res.map(x=>`<div class="row" data-mid="${esc(x.id)}"><div class="av">${esc(initials(x))}</div><div class="main"><b>${esc(fullName(x))}</b><small>${esc([x.categorie,x.instrument].filter(Boolean).join(" · ")||"—")}</small></div><div class="right">${payeesDe(x.id).length?'<span class="chip ok">À jour</span>':'<span class="chip bad">À régler</span>'}</div></div>`).join("")}</div>`:T.q.length>=2?`<p class="note">Personne à ce nom.</p>`:""}
+          <div class="paves p2" style="margin-top:8px">${pave("qui","nouveau","Nouvel adhérent","",false)}${pave("qui","libre","Non adhérent","achat seul",false)}</div>`}
+        </div>
+        ${T.qui&&T.qui!=="libre"?(cot.length?`<div class="f"><span>Cotisation</span><div class="paves p${cot.length}">${cot.map(([v,l])=>pave("cotis",v,l,"",T.cotis===v)).join("")}</div>
+            ${L().length?`<div class="eMont"><span>Montant</span><b>${eurTxt(minimum()*L().length)}</b></div><p class="note" style="margin:0 2px">${eurTxt(minimum())} par année${L().length>1?" × "+L().length:""}</p>
+            <label class="f" style="margin-bottom:0"><span>Je donne en plus (facultatif)</span><input id="kDon" type="number" inputmode="decimal" min="0" step="1" value="${T.don||""}" placeholder="0"></label>`:`<p class="note" style="margin:6px 2px 0">Touchez une année pour encaisser la cotisation.</p>`}</div>`
+            :`<p class="note">Cotisations ${saisonsCaisse().join(" et ")} déjà réglées.</p>`):""}
+        ${T.qui&&types.length?`<div class="f"><span>Achats</span><div class="paves p${types.length}">${types.map(t=>{const n=cat.filter(a=>a.type===t).reduce((s,a)=>s+(T.q2[a.code]||0),0);return pave("achat",t,ACHATS[t],"",T.ouvert===t).replace("</button>",n?`<i class="nb">${n}</i></button>`:"</button>");}).join("")}</div>
+          ${T.ouvert?`<div class="list" style="margin:10px 0 0">${cat.filter(a=>a.type===T.ouvert).map(a=>`<div class="eArt"><div style="flex:1;min-width:0"><span style="font-weight:600">${esc(a.titre)}</span><small class="note" style="display:block;margin:0">${eurTxt(adh()?a.prixAdherent:a.prix)}${a.prixAdherent<a.prix?(adh()?" (prix adhérent)":" (non adhérent)"):""}</small></div>
+            <button type="button" class="btn sm sec" data-moins="${esc(a.code)}" aria-label="Retirer">−</button><span class="eQ">${T.q2[a.code]||0}</span><button type="button" class="btn sm sec" data-plus="${esc(a.code)}" aria-label="Ajouter">+</button></div>`).join("")}</div>`:""}</div>`:""}
+        ${LG.length?`<div class="f"><span>Règlement</span><div class="paves p2">${[["especes","Espèces"],["sumup","SumUp"],["cheque","Chèque"],["tel","Sur son téléphone"]].map(([k,l])=>pave("mode",k,l,"",T.mode===k)).join("")}</div>
+            ${T.mode==="sumup"?`<div class="banner" style="margin:10px 0 0">Tapez <b>${eurTxt(total())}</b> sur le terminal SumUp.</div>`:""}
+            ${T.mode==="cheque"?`<label class="f"><span>N° du chèque</span><input id="kRef" value="${esc(T.ref)}" inputmode="numeric"></label>`:""}
+            ${T.mode==="tel"?`<p class="note" style="margin:8px 2px 0">La personne paie elle-même sur son téléphone (HelloAsso ou SumUp) : touchez « Afficher le QR code ».</p>`:""}</div>
+          <div class="card" style="margin-top:12px">${LG.map(x=>`<div style="display:flex;justify-content:space-between;gap:10px;padding:3px 0"><span>${esc(x.l)}</span><span>${eurTxt(x.m)}</span></div>`).join("")}
+            <div style="display:flex;justify-content:space-between;border-top:1px solid var(--line);margin-top:6px;padding-top:8px;font-size:19px"><b>Total</b><b>${eurTxt(total())}</b></div></div>
+          <button class="btn gold full big" data-k="valider">${T.mode==="tel"?"Afficher le QR code":`Valider · ${eurTxt(total())}`}</button>`:""}
+        ${S.isAdmin?`<p class="note" style="text-align:center;margin-top:12px"><a href="#" class="lnk" data-k="detail">Saisie détaillée (date, virement, prélèvement…)</a></p>`:""}`;
+      const q=$("#kQ",el);if(q){q.oninput=()=>{T.q=q.value;const pos=q.selectionStart;rendre();const q2=$("#kQ",el);q2.focus();try{q2.setSelectionRange(pos,pos);}catch(e){}};}
+      if(T.qui==="nouveau"||T.qui==="libre"){["kP","kN","kM","kT"].forEach(id=>{const i=$("#"+id,el);if(i){i.value=T[id]||"";i.oninput=()=>{T[id]=i.value;};}});}
+      const dn=$("#kDon",el);if(dn)dn.oninput=()=>{T.don=Math.max(0,Math.min(500,num(dn.value)));const t=$('[data-k="valider"]',el);if(t&&T.mode!=="tel")t.textContent=`Valider · ${eurTxt(total())}`;};
+      const kr=$("#kRef",el);if(kr)kr.oninput=()=>{T.ref=kr.value;};
+    };
+    el.onclick=async e=>{
+      const r=e.target.closest("[data-mid]");if(r){T.qui="membre";T.mid=r.dataset.mid;const lb=libres();T.cotis=lb[0]||"";rendre();return;}
+      const b=e.target.closest(".pave");
+      if(b){const g=b.dataset.g,v=b.dataset.v;
+        if(g==="qui"){T.qui=v;T.cotis=v==="nouveau"?saisonsCaisse()[0]:"";}
+        else if(g==="cotis")T.cotis=T.cotis===v?"":v;
+        else if(g==="achat")T.ouvert=T.ouvert===v?"":v;
+        else T[g]=v;
+        rendre();return;}
+      const pm=e.target.closest("[data-plus],[data-moins]");
+      if(pm){const k=pm.dataset.plus||pm.dataset.moins;T.q2[k]=Math.max(0,Math.min(20,(T.q2[k]||0)+(pm.dataset.plus?1:-1)));rendre();return;}
+      const k=e.target.closest("[data-k]");if(!k)return;
+      if(k.dataset.k==="changer"){Object.assign(T,{qui:"",mid:"",cotis:"",q:""});rendre();return;}
+      if(k.dataset.k==="detail"){e.preventDefault();closeSheet();setTimeout(()=>paySheet(T.qui==="membre"?T.mid:undefined),50);return;}
+      if(k.dataset.k==="valider"){k.disabled=true;try{await caisseValider(T,{m,L,minimum,lignes,total});}finally{k.disabled=false;}}
+    };
+    rendre();
+  });
+}
+async function caisseValider(T,F){
+  const LG=F.lignes();if(!LG.length)return toast("Choisissez une cotisation ou un achat");
+  let mm=F.m();
+  if(T.qui==="nouveau"){
+    const prenom=(T.kP||"").trim(),nom=(T.kN||"").trim();
+    if(!prenom||!nom)return toast("Prénom et nom du nouvel adhérent obligatoires");
+    const email=mails(T.kM||"").join(", ");if(mails(T.kM||"").some(x=>!mailOk(x)))return toast("Adresse mail invalide");
+    const dup=S.membres.find(x=>norm(x.nom)===norm(nom)&&norm(x.prenom)===norm(prenom));
+    if(dup&&!await confirmBox(`${fullName(dup)} existe déjà. L'utiliser plutôt que de créer une nouvelle fiche ?`,"Utiliser cette fiche",false)){}
+    else if(dup){mm=dup;}
+    if(!mm){const nid=uid(),nm={nom:nom.toUpperCase(),prenom,categorie:T.statut==="sympathisant"?"Sympathisant":"",instrument:"",email,tel:(T.kT||"").trim(),actif:true,potentiel:false,source:"Encaissé à la table",cree:new Date().toISOString()};
+      if(!await put("membres/"+nid,nm))return;mm={id:nid,...nm};}
+  }
+  if(T.mode==="tel"){
+    if(mm){closeSheet();return enLigneQrFiche(mm);}
+    const url=enLigneUrl("1");closeSheet();
+    return openSheet("Payer sur son téléphone",`<div class="card" style="text-align:center"><p style="margin-top:0">Faites scanner ce QR code : la personne choisit ses achats et paie sur son téléphone.</p><div id="eQr"></div></div>`,q=>{const cv=qrCanvas(url,320);cv.style.cssText="width:260px;max-width:100%;height:auto";$("#eQr",q).appendChild(cv);});
+  }
+  const total=F.total();
+  if(!await confirmBox(`Encaisser ${eurTxt(total)} en ${MODES[T.mode]||T.mode} ?${T.mode==="sumup"?" Le paiement doit être accepté sur le terminal.":""}`,"Encaisser",false))return;
+  const lot=uid().slice(0,8),date=today(),ref=T.mode==="cheque"?(T.ref||"").trim():"",nomAff=mm?fullName(mm):`${(T.kP||"").trim()} ${(T.kN||"").trim().toUpperCase()}`.trim();
+  const L=F.L(),mn=F.minimum(),pays=[],ventes=[];
+  if(L.length&&mm){const par=Math.round((mn+T.don/L.length)*100)/100;
+    L.forEach(s=>pays.push(clean("paiements",{id:uid(),membreId:mm.id,nomAffiche:fullName(mm),saison:s,montant:par,cotis:mn,mode:T.mode,date,ref,note:`À la table · lot ${lot}`,compta:"",cree:new Date().toISOString()})));}
+  LG.filter(x=>x.a).forEach(x=>ventes.push({id:uid(),date,categorie:x.a.type,produit:x.l,montant:x.m,mode:T.mode,acheteur:nomAff,email:mm?(mails(mm.email)[0]||""):"",boutique:"Table",ref,commande:`table-${lot}`,membreId:mm?mm.id:null}));
+  try{
+    let rows=[];
+    if(pays.length)rows=await chk(S.sb.from("paiements").insert(pays).select());
+    if(ventes.length)await chk(S.sb.from("ventes").insert(ventes));
+    toast("Encaissement enregistré");reload();
+    if(T.mode==="especes"&&rows&&rows[0])recuSheet(rows[0]);else closeSheet();
+  }catch(e){toast("Enregistrement impossible : "+errMsg(e));}
+}
 
 (function init(){
   if(!CONFIG_OK){go();return;}
