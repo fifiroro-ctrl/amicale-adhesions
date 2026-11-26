@@ -3139,7 +3139,7 @@ const saisonsCaisse=()=>[String(cfg().saison),String(+cfg().saison+1)];
 const payeesDe=mid=>saisonsCaisse().filter(s=>paysSaison(mid,s).length);
 async function caisseSheet(mid){
   const cat=await catalogue();
-  const T={qui:mid?"membre":"",mid:mid||"",q:"",statut:"actif",cotis:"",don:0,q2:{},ouvert:"",mode:"especes",ref:""};
+  const T={qui:mid?"membre":"",mid:mid||"",q:"",statut:"actif",cotis:"",don:0,q2:{},ouvert:"",mode:"",ref:""};
   const types=Object.keys(ACHATS).filter(t=>cat.some(p=>p.type===t));
   openSheet("Encaisser",`<div id="kx"></div>`,p=>{
     const el=$("#kx",p);
@@ -3181,7 +3181,7 @@ async function caisseSheet(mid){
             ${T.mode==="tel"?`<p class="note" style="margin:8px 2px 0">La personne paie elle-même sur son téléphone (HelloAsso ou SumUp) : touchez « Afficher le QR code ».</p>`:""}</div>
           <div class="card" style="margin-top:12px">${LG.map(x=>`<div style="display:flex;justify-content:space-between;gap:10px;padding:3px 0"><span>${esc(x.l)}</span><span>${eurTxt(x.m)}</span></div>`).join("")}
             <div style="display:flex;justify-content:space-between;border-top:1px solid var(--line);margin-top:6px;padding-top:8px;font-size:19px"><b>Total</b><b>${eurTxt(total())}</b></div></div>
-          <button class="btn gold full big" data-k="valider">${T.mode==="tel"?"Afficher le QR code":`Valider · ${eurTxt(total())}`}</button>`:""}
+          ${T.mode?`<button class="btn gold full big" data-k="valider">${T.mode==="tel"?"Afficher le QR code":`Valider · ${eurTxt(total())}`}</button>`:`<p class="note" style="text-align:center;font-size:15px">Touchez le mode de règlement : Espèces, SumUp, Chèque…</p>`}`:""}
         ${S.isAdmin?`<p class="note" style="text-align:center;margin-top:12px"><a href="#" class="lnk" data-k="detail">Saisie détaillée (date, virement, prélèvement…)</a></p>`:""}`;
       const q=$("#kQ",el);if(q){q.oninput=()=>{T.q=q.value;const pos=q.selectionStart;rendre();const q2=$("#kQ",el);q2.focus();try{q2.setSelectionRange(pos,pos);}catch(e){}};}
       if(T.qui==="nouveau"||T.qui==="libre"){["kP","kN","kM","kT"].forEach(id=>{const i=$("#"+id,el);if(i){i.value=T[id]||"";i.oninput=()=>{T[id]=i.value;};}});}
