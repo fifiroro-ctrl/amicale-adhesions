@@ -7,6 +7,8 @@
 <meta name="theme-color" content="#16244a">
 <title>Amicale — Adhésions</title>
 <link rel="manifest" href="manifest.webmanifest">
+<script>/* Page de paiement : sans manifeste, « Sur l'écran d'accueil » garde l'adresse de la page au lieu d'ouvrir la connexion. */
+if(/[?&]payer=/.test(location.search)){document.querySelector('link[rel=manifest]').remove();document.querySelector('meta[name=apple-mobile-web-app-capable]').content="no";document.title="Adhérer à l'Amicale";}</script>
 <link rel="icon" type="image/png" href="AMGPP-Logo-Web.png">
 <link rel="apple-touch-icon" href="AMGPP-Logo-3cm.jpg?v=2">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
