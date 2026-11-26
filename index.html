@@ -398,11 +398,10 @@ function caisseAccueil(){
   const esp=maCaisse(S.uid),tot=esp.reduce((t,p)=>t+num(p.montant),0);
   $("#acc").innerHTML=`<div id="qCmd"></div>
     <div class="btns"><button class="btn gold full big" id="qPay">+ Encaisser</button></div>
-    <div class="btns"><button class="btn sec" id="qMem">+ Nouvel adhérent</button></div>
     <div class="grid"><div class="stat"><b>${eur(tot)}</b><span>espèces à remettre au trésorier</span></div><div class="stat"><b>${mine.filter(p=>!p.annule).length}</b><span>encaissements saisis</span></div></div>
     <h3>Mes derniers encaissements</h3>
     ${mine.length?`<div class="list">${mine.slice(0,8).map(payRow).join("")}</div><a class="back" href="#paiements">Tout voir ›</a>`:`<div class="empty">Aucun encaissement pour l'instant.</div>`}`;
-  $("#qPay").onclick=()=>caisseSheet();$("#qMem").onclick=()=>memberSheet();
+  $("#qPay").onclick=()=>caisseSheet();
   $$("[data-p]").forEach(r=>r.onclick=()=>payDetail(r.dataset.p));
   const qc=$("#qCmd");if(S._cmd)cmdListe(qc);cmdCharger().then(()=>{if(document.body.contains(qc))cmdListe(qc);}).catch(()=>{});
 }
